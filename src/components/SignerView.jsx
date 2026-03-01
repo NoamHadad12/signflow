@@ -3,42 +3,73 @@ import { useParams } from 'react-router-dom';
 import { storage } from '../firebase';
 import { ref, getDownloadURL } from 'firebase/storage';
 import { Document, Page, pdfjs } from 'react-pdf';
-
 import SignaturePad from 'react-signature-canvas';
+
+// Resolve issue with some versions of react-signature-canvas
 const SignatureCanvas = SignaturePad.default || SignaturePad;
 
-// --- IMPORTANT: VITE-FRIENDLY WORKER CONFIGURATION ---
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url,
-).toString();
+// Ensure the worker version matches the package version
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@5.4.296/build/pdf.worker.min.mjs`;
 
 const SignerView = () => {
+  console.log("!!! DEBUG: SignerView component is rendering !!!");
+
   const { documentId } = useParams();
   const [pdfUrl, setPdfUrl] = useState(null);
   const [numPages, setNumPages] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
   const [signedPdfUrl, setSignedPdfUrl] = useState('');
-  
-  // Initialize ref with null for better practice with DOM elements/components
+  const [isSigned, setIsSigned] = useState(false);
   const sigCanvas = useRef(null);
 
   useEffect(() => {
     const fetchDocument = async () => {
+      if (!documentId) return;
+
       try {
+        console.log("Attempting to fetch PDF for ID:", documentId);
         const fileRef = ref(storage, `pdfs/${documentId}.pdf`);
-        const url = await getDownloadURL(fileRef);
-        setPdfUrl(url);
+        
+        // Get the authenticated download URL
+        let url = await getDownloadURL(fileRef);
+
+        // Force the URL to retrieve the media content (binary)
+        if (!url.includes('alt=media')) {
+          url += (url.includes('?') ? '&' : '?') + 'alt=media';
+        }
+
+        // Fetch the PDF as a blob to bypass potential CORS issues with react-pdf
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error('Failed to fetch the PDF file content.');
+        }
+        
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        
+        console.log("SUCCESS! PDF Blob URL created:", blobUrl);
+        setPdfUrl(blobUrl);
+
       } catch (error) {
-        console.error("Error fetching PDF from storage:", error);
+        console.error("FIREBASE/FETCH ERROR:", error);
       }
     };
+
     fetchDocument();
+
+    // Clean up the object URL when component unmounts
+    return () => {
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+    };
   }, [documentId]);
 
   const onDocumentLoadSuccess = ({ numPages }) => {
     setNumPages(numPages);
+  };
+
+  const handleBeginStroke = () => {
+    setIsSigned(true);
   };
 
   const handleFinish = async () => {
@@ -64,11 +95,9 @@ const SignerView = () => {
         throw new Error(result.error || 'Failed to sign the document.');
       }
 
-      // Get the download URL for the newly signed PDF
-      const signedFileRef = ref(storage, result.downloadUrl);
-      const downloadUrl = await getDownloadURL(signedFileRef);
-      setSignedPdfUrl(downloadUrl);
-      setIsCompleted(true); // Set completion state to true
+      // The API returns the direct download URL for the signed file
+      setSignedPdfUrl(result.downloadUrl);
+      setIsCompleted(true); 
       
     } catch (error) {
       console.error("Error during the signing process:", error);
@@ -78,27 +107,18 @@ const SignerView = () => {
     }
   };
 
-  // Success screen component
+  // Success screen view
   if (isCompleted) {
     return (
-      <div style={{ padding: '40px', textAlign: 'center', border: '1px solid #ccc', borderRadius: '8px', backgroundColor: '#f9f9f9' }}>
-        <h1 style={{ color: '#28a745' }}>✓ Document Signed and Sent!</h1>
+      <div className="success-screen">
+        <h1>✓ Document Signed and Sent!</h1>
         <p>Thank you for completing the document.</p>
         <a 
           href={signedPdfUrl} 
           download 
           target="_blank" 
           rel="noopener noreferrer"
-          style={{
-            display: 'inline-block',
-            marginTop: '20px',
-            padding: '12px 24px',
-            backgroundColor: '#007bff',
-            color: 'white',
-            textDecoration: 'none',
-            borderRadius: '5px',
-            cursor: 'pointer'
-          }}
+          className="btn btn-primary"
         >
           Download Your Copy
         </a>
@@ -107,11 +127,11 @@ const SignerView = () => {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px' }}>
+    <div className="signer-view">
       <h1>Sign Document</h1>
       
       {pdfUrl ? (
-        <div style={{ border: '1px solid #ccc', marginBottom: '20px', maxWidth: '100%', overflow: 'auto' }}>
+        <div className="pdf-document-container">
           <Document 
             file={pdfUrl} 
             onLoadSuccess={onDocumentLoadSuccess}
@@ -133,58 +153,26 @@ const SignerView = () => {
         <p>Loading document from the cloud...</p>
       )}
 
-      {/* Scaled-down Signature Box */}
-      <div style={{ 
-        marginTop: '20px', 
-        width: '404px', // Scaled down width
-        border: '1px solid #ccc', 
-        borderRadius: '8px', 
-        padding: '10px', 
-        boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
-        backgroundColor: '#fff'
-      }}>
-        <p style={{ 
-          textAlign: 'left', 
-          margin: '0 0 10px 5px', 
-          fontWeight: 'bold', 
-          color: '#333' 
-        }}>
+      <div className="signature-area">
+        <p style={{ textAlign: 'left', margin: '0 0 10px 5px', fontWeight: 'bold' }}>
           Signature
         </p>
-        <div style={{ border: '2px solid #e0e0e0', borderRadius: '4px' }}>
+        <div className="signature-pad-container">
           <SignatureCanvas 
             ref={sigCanvas}
             penColor='black'
-            minWidth={2.5}
-            maxWidth={5}
-            canvasProps={{ width: 400, height: 150, className: 'sigCanvas' }} // Scaled down canvas
+            onBegin={handleBeginStroke}
+            canvasProps={{ className: 'sigCanvas' }}
           />
+          {!isSigned && <div className="signature-pad-placeholder">Sign Here</div>}
         </div>
-        <p style={{
-          position: 'relative',
-          top: '-100px', // Adjusted vertical position
-          textAlign: 'center',
-          color: '#aaa',
-          pointerEvents: 'none',
-          zIndex: -1,
-          margin: 0
-        }}>
-          Sign Here
-        </p>
       </div>
 
       <button 
         onClick={handleFinish}
         disabled={isSubmitting}
-        style={{ 
-          marginTop: '20px', 
-          padding: '15px 30px', 
-          backgroundColor: isSubmitting ? '#ccc' : '#28a745', 
-          color: 'white', 
-          border: 'none', 
-          borderRadius: '5px', 
-          cursor: isSubmitting ? 'not-allowed' : 'pointer' 
-        }}
+        className="btn btn-success"
+        style={{ marginTop: '20px' }}
       >
         {isSubmitting ? 'Processing...' : 'Complete & Sign'}
       </button>

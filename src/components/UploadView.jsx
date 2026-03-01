@@ -44,12 +44,18 @@ const UploadView = () => {
     });
   };
 
+  const shareOnWhatsApp = () => {
+    const message = `You've been sent a document to sign: ${generatedLink}`;
+    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+  };
+
   return (
-    <div style={{ padding: '40px', textAlign: 'center', maxWidth: '600px', margin: 'auto' }}>
+    <div className="upload-view">
       <h1>SignFlow</h1>
-      <p style={{ color: '#666', marginBottom: '30px' }}>Upload a PDF document to generate a shareable signing link.</p>
+      <p className="subtitle">Upload a PDF document to generate a shareable signing link.</p>
       
-      <div style={{ border: '2px dashed #ccc', padding: '20px', borderRadius: '8px', marginBottom: '20px' }}>
+      <div className="drop-zone">
         <input 
           type="file" 
           accept="application/pdf" 
@@ -57,66 +63,39 @@ const UploadView = () => {
             setFile(e.target.files[0]);
             setGeneratedLink(''); // Clear link when a new file is selected
           }} 
-          style={{ marginBottom: '10px' }}
+          className="file-input"
         />
         <button 
           onClick={handleUpload} 
           disabled={uploading || !file}
-          style={{ 
-            padding: '10px 20px', 
-            backgroundColor: (uploading || !file) ? '#ccc' : '#007bff', 
-            color: 'white', 
-            border: 'none', 
-            borderRadius: '5px', 
-            cursor: (uploading || !file) ? 'not-allowed' : 'pointer' 
-          }}
+          className="btn btn-primary"
         >
           {uploading ? "Uploading..." : "Upload & Generate Link"}
         </button>
       </div>
 
       {generatedLink && (
-        <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f0f8ff', borderRadius: '8px', border: '1px solid #bde0fe' }}>
-          <p style={{ fontWeight: 'bold', margin: '0 0 10px 0' }}>Your link is ready:</p>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', flexWrap: 'wrap' }}>
+        <div className="generated-link-container">
+          <p>Your link is ready:</p>
+          <div className="link-input-group">
             <input 
               type="text" 
               value={generatedLink} 
               readOnly 
-              style={{ flexGrow: 1, padding: '8px', border: '1px solid #ccc', borderRadius: '4px', minWidth: '250px' }}
             />
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button 
-                onClick={copyToClipboard} 
-                style={{ 
-                  padding: '8px 12px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  backgroundColor: isCopied ? '#1e8449' : '#28a745', // Darker green when copied
-                  color: 'white',
-                  transition: 'background-color 0.3s'
-                }}
-              >
-                {isCopied ? 'Copied!' : 'Copy Link'}
-              </button>
-              <button 
-                onClick={() => {
-                  const message = encodeURIComponent(`Hey! I've sent you a secure document to sign via SignFlow. Click here to review and sign: ${generatedLink}`);
-                  window.open(`https://wa.me/?text=${message}`, '_blank');
-                }}
-                style={{
-                  padding: '8px 12px',
-                  backgroundColor: '#25D366', // Official WhatsApp green
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer'
-                }}
-              >
-                WhatsApp
-              </button>
-            </div>
+            <button 
+              onClick={copyToClipboard} 
+              className="btn btn-success"
+            >
+              {isCopied ? 'Copied!' : 'Copy'}
+            </button>
+            <button
+              onClick={shareOnWhatsApp}
+              className="btn btn-primary"
+              style={{ backgroundColor: '#25D366' }} // WhatsApp green color
+            >
+              WhatsApp
+            </button>
           </div>
         </div>
       )}

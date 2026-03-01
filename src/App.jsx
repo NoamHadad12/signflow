@@ -1,21 +1,22 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import './App.css'; // Make sure to import the CSS file
 
-// Import the component files (we will create them in the next step)
+// Import the component files
 import UploadView from './components/UploadView';
 import SignerView from './components/SignerView';
 
-
 function App() {
   return (
-    // Wrap the app in BrowserRouter to enable navigation
     <BrowserRouter>
-      <Routes>
-        {/* The default route: Upload screen */}
-        <Route path="/" element={<UploadView />} />
-        
-        {/* The signing route: Requires a dynamic document ID */}
-        <Route path="/sign/:documentId" element={<SignerView />} />
-      </Routes>
+      <div className="app-container">
+        <Routes>
+          {/* The default route: Upload screen */}
+          <Route path="/" element={<UploadView />} />
+          
+          {/* The signing route: Requires a dynamic document ID */}
+          <Route path="/sign/:documentId" element={<SignerView />} />
+        </Routes>
+      </div>
     </BrowserRouter>
   );
 }
