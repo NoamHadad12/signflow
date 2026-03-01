@@ -78,16 +78,45 @@ const UploadView = () => {
       {generatedLink && (
         <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f0f8ff', borderRadius: '8px', border: '1px solid #bde0fe' }}>
           <p style={{ fontWeight: 'bold', margin: '0 0 10px 0' }}>Your link is ready:</p>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', flexWrap: 'wrap' }}>
             <input 
               type="text" 
               value={generatedLink} 
               readOnly 
-              style={{ flexGrow: 1, padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+              style={{ flexGrow: 1, padding: '8px', border: '1px solid #ccc', borderRadius: '4px', minWidth: '250px' }}
             />
-            <button onClick={copyToClipboard} style={{ padding: '8px 12px' }}>
-              {isCopied ? 'Copied!' : 'Copy'}
-            </button>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button 
+                onClick={copyToClipboard} 
+                style={{ 
+                  padding: '8px 12px',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  backgroundColor: isCopied ? '#1e8449' : '#28a745', // Darker green when copied
+                  color: 'white',
+                  transition: 'background-color 0.3s'
+                }}
+              >
+                {isCopied ? 'Copied!' : 'Copy Link'}
+              </button>
+              <button 
+                onClick={() => {
+                  const message = encodeURIComponent(`Hey! I've sent you a secure document to sign via SignFlow. Click here to review and sign: ${generatedLink}`);
+                  window.open(`https://wa.me/?text=${message}`, '_blank');
+                }}
+                style={{
+                  padding: '8px 12px',
+                  backgroundColor: '#25D366', // Official WhatsApp green
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                WhatsApp
+              </button>
+            </div>
           </div>
         </div>
       )}
