@@ -2,7 +2,7 @@ import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 // fontkit is no longer needed for standard fonts
 // import fontkit from '@pdf-lib/fontkit'; 
 import { initializeApp, getApps } from 'firebase/app';
-import { getStorage, ref, getBytes, uploadBytes } from 'firebase/storage';
+import { getStorage, ref, getBytes, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 // Import pdfjs-dist for text extraction
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
@@ -134,10 +134,13 @@ const keywords = [
     const metadata = { contentType: 'application/pdf' };
     await uploadBytes(signedFileRef, pdfBytes, metadata);
 
+    // Generate a public download URL with a token
+    const downloadUrl = await getDownloadURL(signedFilere);
+
     res.status(200).json({ 
       message: 'Success', 
       fileName: `signed_${documentId}.pdf`,
-      downloadUrl: `pdfs/signed_${documentId}.pdf` 
+      downloadUrl: downloadUrl 
     });
 
   } catch (error) {
