@@ -1,4 +1,4 @@
-import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import { PDFDocument, rgb } from 'pdf-lib';
 import { initializeApp, getApps } from 'firebase/app';
 import { getStorage, ref, getBytes, uploadBytes, getDownloadURL } from 'firebase/storage';
 
@@ -32,61 +32,42 @@ export default async function handler(req, res) {
 
     const pages = pdfDoc.getPages();
     
-    // Choose specific page based on uploaded configuration (convert 1-based index to 0-based index)
+    // Choose specific page based on uploaded configuration (convert 1-based index to 0-based)
     const targetPageNum = signatureCoords ? signatureCoords.page - 1 : pages.length - 1;
     const targetPage = pages[targetPageNum];
     const { width, height } = targetPage.getSize();
 
-    // 3. Define signature area dimensions and draw elements
-    const sigWidth = 150; 
-    const sigHeight = 50;
-    const boxPadding = 5;
+    // Scale the signature box using the stored normalized bounding box (nw, nh)
+    // Fall back to sensible defaults for documents created before the bounding box upgrade
+    const sigWidth = (signatureCoords?.nw ?? 0.3) * width;
+    const sigHeight = (signatureCoords?.nh ?? 0.08) * height;
 
-    // Default target bottom-right fallback
-    let targetX = width - sigWidth - 15; 
-    let targetY = 30;               
+    // Default to bottom-right corner if no coords are stored
+    let targetX = width - sigWidth - 15;
+    let targetY = 30;
 
-    // Map relative click percentage coordinates to native point scales
     if (signatureCoords) {
-      // Scale percentages by real document PDF widths
-      const centerX = signatureCoords.nx * width;
-      // pdf-lib's Y-Axis runs bottom-to-top naturally (reverse of standard CSS/DOM)
-      const centerY = (1 - signatureCoords.ny) * height; 
-
-      // Offset the coordinate by half width/height because the uploader clicked exactly at the box center
-      targetX = centerX - (sigWidth / 2);
-      targetY = centerY - (sigHeight / 2);
+      // Map normalized top-left (nx, ny) to pdf-lib coordinates
+      // pdf-lib Y-axis runs bottom-to-top, so we invert and subtract the box height
+      targetX = signatureCoords.nx * width;
+      targetY = (1 - signatureCoords.ny - (signatureCoords.nh ?? 0.08)) * height;
     }
-    
-    const sigY = targetY;
 
-    // Utilize the standard font for the signature label
-    const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-
-    // Draw the "Signature" label with a clean, bold look
-    targetPage.drawText('Signature', {
-      x: targetX,
-      y: sigY + sigHeight + boxPadding, // Position text above the signature area
-      font: font, 
-      size: 12,
-      color: rgb(0.1, 0.1, 0.1),
-    });
-
-    // Draw the signature image, making it appear bolder
+    // Draw the signature image scaled exactly to the bounding box the admin defined
     targetPage.drawImage(signatureImage, {
       x: targetX,
-      y: sigY,
+      y: targetY,
       width: sigWidth,
       height: sigHeight,
-      opacity: 0.95, 
+      opacity: 0.95,
     });
 
-    // Draw a thicker line below the signature for a professional finish
+    // Draw a thin underline beneath the signature for a professional finish
     targetPage.drawLine({
-        start: { x: targetX, y: sigY - boxPadding + 2 },
-        end: { x: targetX + sigWidth, y: sigY - boxPadding + 2 },
-        thickness: 1.5, 
-        color: rgb(0.1, 0.1, 0.1),
+      start: { x: targetX, y: targetY - 3 },
+      end: { x: targetX + sigWidth, y: targetY - 3 },
+      thickness: 1.5,
+      color: rgb(0.1, 0.1, 0.1),
     });
 
     // 4. Save and Upload

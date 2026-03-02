@@ -161,13 +161,15 @@ const SignerView = () => {
                     renderTextLayer={false} 
                     renderAnnotationLayer={false} 
                   />
-                  {/* Overlay the bounding box so the client knows exactly where their line goes */}
+                  {/* Overlay the bounding box so the signer knows exactly where to sign */}
                   {signatureCoords && signatureCoords.page === pageNumber && (
                     <div 
                       className="signature-marker" 
                       style={{
                         left: `${signatureCoords.nx * 100}%`,
-                        top: `${signatureCoords.ny * 100}%`
+                        top: `${signatureCoords.ny * 100}%`,
+                        width: `${(signatureCoords.nw || 0.3) * 100}%`,
+                        height: `${(signatureCoords.nh || 0.08) * 100}%`,
                       }}
                     >
                       Sign Here
