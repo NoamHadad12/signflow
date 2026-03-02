@@ -14,19 +14,34 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
 // Resolve issue with some versions of react-signature-canvas
 const SignatureCanvas = SignaturePad.default || SignaturePad;
 
-// Return the display label for a given marker based on its subtype
-const getFieldLabel = (marker) => {
-  if (!marker.type || marker.type === 'signature') return 'Sign Here';
+// Return a stable key for a marker's value in the fieldValues map
+// Signature markers have no key; all text variants return a string key
+const getMarkerKey = (marker) => {
+  if (!marker.type || marker.type === 'signature') return null;
+  if (marker.type === 'date' || marker.subtype === 'date') return '__date__';
+  if (marker.type === 'customText') return marker.label || 'custom';
+  // Legacy subtype-based markers for backward compatibility
   if (marker.subtype === 'firstName') return 'First Name';
-  if (marker.subtype === 'lastName') return 'Last Name';
-  if (marker.subtype === 'date') return 'Date';
+  if (marker.subtype === 'lastName')  return 'Last Name';
+  return marker.subtype || 'field';
+};
+
+// Return the display label for any marker format
+const getMarkerLabel = (marker) => {
+  if (!marker.type || marker.type === 'signature') return 'Sign Here';
+  if (marker.type === 'date' || marker.subtype === 'date') return 'Date';
+  if (marker.type === 'customText') return marker.label || 'Custom Field';
+  if (marker.subtype === 'firstName') return 'First Name';
+  if (marker.subtype === 'lastName')  return 'Last Name';
   return 'Field';
 };
 
-// Return the accent color for a given marker subtype
-const getFieldColor = (subtype) => {
-  const MAP = { signature: '#e53e3e', firstName: '#2563eb', lastName: '#7c3aed', date: '#059669' };
-  return MAP[subtype] || '#e53e3e';
+// Return the accent color for any marker format
+const getMarkerColor = (marker) => {
+  if (!marker.type || marker.type === 'signature') return '#e53e3e';
+  if (marker.type === 'date' || marker.subtype === 'date') return '#059669';
+  const LEGACY = { firstName: '#2563eb', lastName: '#7c3aed' };
+  return LEGACY[marker.subtype] || '#2563eb';
 };
 
 const SignerView = () => {
@@ -39,17 +54,13 @@ const SignerView = () => {
   const [isCompleted, setIsCompleted] = useState(false);
   const [signedPdfUrl, setSignedPdfUrl] = useState('');
   const [isSigned, setIsSigned] = useState(false);
-  // Single global value per field subtype — changing one populates every marker of that subtype
-  const [globalFields, setGlobalFields] = useState({
-    firstName: '',
-    lastName: '',
-    date: new Date().toLocaleDateString('en-GB'), // Auto-filled as DD/MM/YYYY
+  // fieldValues is keyed by getMarkerKey() — one value shared across all markers with the same key
+  const [fieldValues, setFieldValues] = useState({
+    __date__: new Date().toLocaleDateString('en-GB'), // Pre-fill today as DD/MM/YYYY
   });
+  const setFieldValue = (key, value) =>
+    setFieldValues((prev) => ({ ...prev, [key]: value }));
   const sigCanvas = useRef(null);
-
-  // Helper: update one key inside globalFields
-  const setField = (key, value) =>
-    setGlobalFields((prev) => ({ ...prev, [key]: value }));
 
   // Clear the signature pad and reset the signed flag
   const handleClearSignature = () => {
@@ -74,7 +85,7 @@ const SignerView = () => {
           // Support the new markers array and legacy single signatureCoords field
           if (Array.isArray(data.markers) && data.markers.length > 0) {
             setMarkers(data.markers);
-            // Date is already pre-filled in globalFields state initialiser; nothing extra needed.
+            // Date is already pre-filled in fieldValues state initialiser; nothing extra needed.
           } else if (data.signatureCoords) {
             setMarkers([data.signatureCoords]);
           }
@@ -121,16 +132,23 @@ const SignerView = () => {
 
   // Derive which field types are required based on the loaded markers
   const hasSignature = markers.some((m) => !m.type || m.type === 'signature');
-  const hasFirstName = markers.some((m) => m.subtype === 'firstName');
-  const hasLastName  = markers.some((m) => m.subtype === 'lastName');
-  const hasDate      = markers.some((m) => m.subtype === 'date');
 
-  // All required fields are complete — controls button state and status message
+  // Build a deduplicated list of text-field cards to render in the footer
+  // Each entry has: { key, label, color } — one card per unique key
+  const textCards = [];
+  const _seenKeys = new Set();
+  markers.forEach((m) => {
+    if (!m.type || m.type === 'signature') return;
+    const key = getMarkerKey(m);
+    if (!key || _seenKeys.has(key)) return;
+    _seenKeys.add(key);
+    textCards.push({ key, label: getMarkerLabel(m), color: getMarkerColor(m) });
+  });
+
+  // All required fields are filled — drives button enabled state and status text
   const isFormReady =
     (!hasSignature || isSigned) &&
-    (!hasFirstName || globalFields.firstName.trim() !== '') &&
-    (!hasLastName  || globalFields.lastName.trim()  !== '') &&
-    (!hasDate      || globalFields.date.trim()       !== '');
+    textCards.every(({ key }) => (fieldValues[key] || '').trim() !== '');
 
   const handleFinish = async () => {
     if (!isFormReady) return;
@@ -139,9 +157,8 @@ const SignerView = () => {
       // Build a per-marker-index formValues map that the API expects
       const formValues = {};
       markers.forEach((m, idx) => {
-        if (m.subtype === 'firstName') formValues[idx] = globalFields.firstName;
-        else if (m.subtype === 'lastName') formValues[idx] = globalFields.lastName;
-        else if (m.subtype === 'date')     formValues[idx] = globalFields.date;
+        const key = getMarkerKey(m);
+        if (key) formValues[idx] = fieldValues[key] || '';
       });
 
       const signatureData = hasSignature
@@ -215,16 +232,17 @@ const SignerView = () => {
                   />
                   {pageMarkers.map((marker) => {
                     const isSigMarker = !marker.type || marker.type === 'signature';
-                    const color = getFieldColor(marker.subtype || 'signature');
-                    const liveValue = !isSigMarker ? (globalFields[marker.subtype] || '') : '';
+                    const color = getMarkerColor(marker);
+                    const key = getMarkerKey(marker);
+                    const liveValue = key ? (fieldValues[key] || '') : '';
                     const isEmpty = !isSigMarker && !liveValue;
 
-                    // Show a checkmark on signed boxes; live value or placeholder for text fields
+                    // Show a checkmark once signed; live value or placeholder label for text fields
                     let overlayText;
                     if (isSigMarker) {
                       overlayText = isSigned ? '✓' : 'Sign Here';
                     } else {
-                      overlayText = liveValue || getFieldLabel(marker);
+                      overlayText = liveValue || getMarkerLabel(marker);
                     }
 
                     return (
@@ -284,64 +302,24 @@ const SignerView = () => {
                 </div>
               )}
 
-              {/* First Name card */}
-              {hasFirstName && (
-                <div className="form-card">
-                  <div className="form-card-header" style={{ color: '#2563eb', borderBottomColor: '#2563eb1a' }}>
-                    <span className="form-card-label">First Name</span>
+              {/* One input card per unique text field (dynamic, label-driven) */}
+              {textCards.map(({ key, label, color }) => (
+                <div className="form-card" key={key}>
+                  <div className="form-card-header" style={{ color, borderBottomColor: `${color}1a` }}>
+                    <span className="form-card-label">{label}</span>
                   </div>
                   <div className="form-card-body">
                     <input
                       className="form-card-input"
                       type="text"
-                      placeholder="Enter first name"
-                      value={globalFields.firstName}
-                      onChange={(e) => setField('firstName', e.target.value)}
-                      style={{ '--card-accent': '#2563eb' }}
+                      placeholder={`Enter ${label.toLowerCase()}`}
+                      value={fieldValues[key] || ''}
+                      onChange={(e) => setFieldValue(key, e.target.value)}
                       dir="auto"
                     />
                   </div>
                 </div>
-              )}
-
-              {/* Last Name card */}
-              {hasLastName && (
-                <div className="form-card">
-                  <div className="form-card-header" style={{ color: '#7c3aed', borderBottomColor: '#7c3aed1a' }}>
-                    <span className="form-card-label">Last Name</span>
-                  </div>
-                  <div className="form-card-body">
-                    <input
-                      className="form-card-input"
-                      type="text"
-                      placeholder="Enter last name"
-                      value={globalFields.lastName}
-                      onChange={(e) => setField('lastName', e.target.value)}
-                      style={{ '--card-accent': '#7c3aed' }}
-                      dir="auto"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Date card */}
-              {hasDate && (
-                <div className="form-card">
-                  <div className="form-card-header" style={{ color: '#059669', borderBottomColor: '#0596691a' }}>
-                    <span className="form-card-label">Date</span>
-                  </div>
-                  <div className="form-card-body">
-                    <input
-                      className="form-card-input"
-                      type="text"
-                      placeholder="DD/MM/YYYY"
-                      value={globalFields.date}
-                      onChange={(e) => setField('date', e.target.value)}
-                      style={{ '--card-accent': '#059669' }}
-                    />
-                  </div>
-                </div>
-              )}
+              ))}
 
             </div>
           )}

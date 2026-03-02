@@ -47,11 +47,14 @@ const firebaseConfig = {
   measurementId: process.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
-// Detect whether a string contains Hebrew Unicode characters (U+0590–U+05FF)
-const containsHebrew = (str) => /[\u0590-\u05FF]/.test(str);
-
-// For RTL text, reverse character order so pdf-lib (which is LTR-only) renders it correctly
-const toRTLString = (str) => str.split('').reverse().join('');
+// Reverse a string character by character for visual RTL rendering in pdf-lib (LTR-only).
+// Hebrew text must be reversed so that pdf-lib places glyphs in the correct visual order.
+const reverseHebrewIfNecessary = (text) => {
+  if (/[\u0590-\u05FF]/.test(text)) {
+    return text.split('').reverse().join('');
+  }
+  return text;
+};
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
@@ -124,8 +127,8 @@ export default async function handler(req, res) {
             opacity: 0.95,
           });
         }
-      } else if (marker.type === 'text') {
-        // Retrieve the value the signer entered for this field
+      } else if (marker.type === 'text' || marker.type === 'customText' || marker.type === 'date') {
+        // 'text' covers legacy markers; 'customText' and 'date' are the current marker types
         const rawValue =
           formValues && formValues[markerIndex] != null ? String(formValues[markerIndex]) : '';
 
@@ -135,17 +138,15 @@ export default async function handler(req, res) {
           // Vertically center the text baseline within the bounding box
           const textY = targetY + (sigHeight - fontSize) / 2;
 
-          const isRTL = containsHebrew(rawValue);
+          // Reverse Hebrew strings so pdf-lib (LTR rendering engine) produces correct RTL output
+          const textToRender = reverseHebrewIfNecessary(rawValue);
+          const isRTL = textToRender !== rawValue; // True when the string was reversed
 
-          // For RTL (Hebrew) text: reverse the glyph order and right-align inside the box.
-          // pdf-lib has no native BiDi engine, so manual reversal is required for correct display.
-          const textToRender = isRTL ? toRTLString(rawValue) : rawValue;
-
-          // Calculate rendered text width so we can right-align Hebrew text precisely
+          // Right-align reversed (RTL) text using the measured text width
           const textWidth = hebrewFont.widthOfTextAtSize(textToRender, fontSize);
           const textX = isRTL
-            ? targetX + sigWidth - textWidth - 4   // right-aligned for RTL
-            : targetX + 4;                          // left-aligned for LTR
+            ? targetX + sigWidth - textWidth - 4  // right-aligned for RTL
+            : targetX + 4;                         // left-aligned for LTR
 
           targetPage.drawText(textToRender, {
             x: textX,

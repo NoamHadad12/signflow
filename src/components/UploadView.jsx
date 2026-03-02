@@ -10,18 +10,31 @@ import 'react-pdf/dist/Page/TextLayer.css';
 // Set the worker source from a reliable CDN to ensure compatibility
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
-// All supported field types the admin can place on the document
+// Predefined field types the admin can place on the document.
+// 'customText' prompts the admin for a label after drawing the box.
 const FIELD_TYPES = [
-  { key: 'signature', label: 'Signature',  type: 'signature', subtype: 'signature', color: '#e53e3e' },
-  { key: 'firstName', label: 'First Name', type: 'text',      subtype: 'firstName', color: '#2563eb' },
-  { key: 'lastName',  label: 'Last Name',  type: 'text',      subtype: 'lastName',  color: '#7c3aed' },
-  { key: 'date',      label: 'Date',       type: 'text',      subtype: 'date',      color: '#059669' },
+  { key: 'signature',  label: 'Signature',     type: 'signature',  color: '#e53e3e' },
+  { key: 'date',       label: 'Date',           type: 'date',       color: '#059669' },
+  { key: 'customText', label: '+ Custom Field', type: 'customText', color: '#2563eb' },
 ];
 
-// Return the human-readable label for a given marker
+// Return the human-readable label for any marker (supports new and legacy formats)
 const getFieldLabel = (marker) => {
-  const ft = FIELD_TYPES.find((f) => f.subtype === marker.subtype);
-  return ft ? ft.label : 'Sign Here';
+  if (!marker.type || marker.type === 'signature') return 'Sign Here';
+  if (marker.type === 'date' || marker.subtype === 'date') return 'Date';
+  if (marker.type === 'customText') return marker.label || 'Custom Field';
+  // Legacy subtype-based text markers
+  if (marker.subtype === 'firstName') return 'First Name';
+  if (marker.subtype === 'lastName')  return 'Last Name';
+  return 'Field';
+};
+
+// Return the accent color for any marker type
+const getMarkerColor = (marker) => {
+  if (!marker.type || marker.type === 'signature') return '#e53e3e';
+  if (marker.type === 'date' || marker.subtype === 'date') return '#059669';
+  const LEGACY = { firstName: '#2563eb', lastName: '#7c3aed' };
+  return LEGACY[marker.subtype] || '#2563eb';
 };
 
 const UploadView = () => {
@@ -42,6 +55,10 @@ const UploadView = () => {
   const [drawingBox, setDrawingBox] = useState(null);
   const currentPageRef = useRef(null);
   const pageRectRef = useRef(null);
+
+  // When a customText box is drawn, hold it here until the admin names it
+  const [pendingBox, setPendingBox] = useState(null);
+  const [pendingLabel, setPendingLabel] = useState('');
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
@@ -104,16 +121,30 @@ const UploadView = () => {
     // Only add the marker if the box is large enough to be intentional (> 1% in both dimensions)
     if (boxNw > 0.01 && boxNh > 0.01) {
       const ft = FIELD_TYPES.find((f) => f.key === activeFieldType) || FIELD_TYPES[0];
-      setMarkers((prev) => [
-        ...prev,
-        { type: ft.type, subtype: ft.subtype, page: pageNumber, nx: boxNx, ny: boxNy, nw: boxNw, nh: boxNh },
-      ]);
+      if (ft.type === 'customText') {
+        // Custom fields need a label — open the naming dialog before committing
+        setPendingBox({ type: ft.type, page: pageNumber, nx: boxNx, ny: boxNy, nw: boxNw, nh: boxNh });
+        setPendingLabel('');
+      } else {
+        setMarkers((prev) => [
+          ...prev,
+          { type: ft.type, page: pageNumber, nx: boxNx, ny: boxNy, nw: boxNw, nh: boxNh },
+        ]);
+      }
     }
   };
 
   // Remove a specific marker by its index in the global markers array
   const handleRemoveMarker = (indexToRemove) => {
     setMarkers((prev) => prev.filter((_, i) => i !== indexToRemove));
+  };
+
+  // Confirm the pending customText box by attaching the admin's label and adding it to markers
+  const confirmPendingBox = () => {
+    if (!pendingBox || !pendingLabel.trim()) return;
+    setMarkers((prev) => [...prev, { ...pendingBox, label: pendingLabel.trim() }]);
+    setPendingBox(null);
+    setPendingLabel('');
   };
 
   const handleUpload = async () => {
@@ -201,7 +232,7 @@ const UploadView = () => {
             You can place multiple fields of different types. Click &times; on any field to remove it.
           </p>
 
-          {/* Field type selector — choose before drawing each box */}
+          {/* Field type selector — choose a type, then drag a box on the document */}
           <div className="field-type-selector">
             {FIELD_TYPES.map((ft) => (
               <button
@@ -218,6 +249,37 @@ const UploadView = () => {
               </button>
             ))}
           </div>
+          {activeFieldType === 'customText' && (
+            <p style={{ fontSize: '0.82rem', color: '#2563eb', marginBottom: 8, marginTop: -4 }}>
+              Drag a box on the PDF, then name the field.
+            </p>
+          )}
+
+          {/* Label dialog — shown after the admin draws a customText box */}
+          {pendingBox && (
+            <div className="label-dialog-overlay">
+              <div className="label-dialog">
+                <h3 className="label-dialog-title">Name this field</h3>
+                <p className="label-dialog-desc">Enter a label so the signer knows what to write (e.g. "Full Name", "ID Number", "Company").</p>
+                <input
+                  autoFocus
+                  className="label-dialog-input"
+                  type="text"
+                  placeholder="Field label"
+                  value={pendingLabel}
+                  onChange={(e) => setPendingLabel(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && pendingLabel.trim()) confirmPendingBox();
+                    if (e.key === 'Escape') setPendingBox(null);
+                  }}
+                />
+                <div className="label-dialog-actions">
+                  <button className="btn btn-secondary" onClick={() => setPendingBox(null)}>Cancel</button>
+                  <button className="btn btn-primary" onClick={confirmPendingBox} disabled={!pendingLabel.trim()}>Add Field</button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="pdf-document-container" style={{ textAlign: 'center' }}>
             <Document 
@@ -264,7 +326,7 @@ const UploadView = () => {
                     )}
                     {/* Render all confirmed markers for this page with type-specific color and label */}
                     {pageMarkers.map((marker) => {
-                      const ft = FIELD_TYPES.find((f) => f.subtype === marker.subtype) || FIELD_TYPES[0];
+                      const color = getMarkerColor(marker);
                       return (
                         <div
                           key={marker.globalIndex}
@@ -274,9 +336,9 @@ const UploadView = () => {
                             top: `${marker.ny * 100}%`,
                             width: `${marker.nw * 100}%`,
                             height: `${marker.nh * 100}%`,
-                            borderColor: ft.color,
-                            backgroundColor: `${ft.color}28`,
-                            color: ft.color,
+                            borderColor: color,
+                            backgroundColor: `${color}28`,
+                            color,
                           }}
                         >
                           <span>{getFieldLabel(marker)}</span>
@@ -288,7 +350,7 @@ const UploadView = () => {
                               e.stopPropagation();
                               handleRemoveMarker(marker.globalIndex);
                             }}
-                            title={`Remove this ${ft.label} field`}
+                            title="Remove this field"
                           >
                             &times;
                           </button>

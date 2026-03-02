@@ -403,9 +403,83 @@ body {
   background-color: var(--success-hover-color);
 }
 
+.btn-secondary {
+  background-color: transparent;
+  color: var(--text-light-color);
+  border: 1.5px solid var(--border-color);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: #f2f4f7;
+}
+
 .btn:disabled {
   background-color: #ccc;
   cursor: not-allowed;
+}
+
+/* ── Label dialog: shown after an admin draws a customText field box ────── */
+.label-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.label-dialog {
+  background: #fff;
+  border-radius: 12px;
+  padding: 28px 32px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  animation: dialog-pop 0.15s ease;
+}
+
+@keyframes dialog-pop {
+  from { transform: scale(0.92); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+
+.label-dialog-title {
+  margin: 0 0 6px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-color);
+}
+
+.label-dialog-desc {
+  margin: 0 0 18px;
+  font-size: 0.88rem;
+  color: var(--text-light-color);
+  line-height: 1.5;
+}
+
+.label-dialog-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--border-radius);
+  font-family: var(--font-family);
+  font-size: 0.95rem;
+  outline: none;
+  margin-bottom: 18px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.label-dialog-input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.2);
+}
+
+.label-dialog-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
 }
 
 /* Success Screen */
