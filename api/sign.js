@@ -86,17 +86,9 @@ export default async function handler(req, res) {
         const rawValue =
           formValues && formValues[markerIndex] != null ? String(formValues[markerIndex]) : '';
 
-        // Format ISO date strings (YYYY-MM-DD) into a human-readable form for the PDF
-        let displayValue = rawValue;
-        if (marker.subtype === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(rawValue)) {
-          const [year, month, day] = rawValue.split('-');
-          const dateObj = new Date(Number(year), Number(month) - 1, Number(day));
-          displayValue = dateObj.toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-          });
-        }
+        // The date value arrives already formatted as DD/MM/YYYY (e.g. 02/03/2026) from the client.
+        // Use it directly as the display string without any conversion.
+        const displayValue = rawValue;
 
         if (displayValue) {
           // Scale font size proportionally to the box height; clamp between 8 pt and 20 pt

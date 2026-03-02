@@ -60,8 +60,8 @@ const SignerView = () => {
           // Support the new markers array and legacy single signatureCoords field
           if (Array.isArray(data.markers) && data.markers.length > 0) {
             setMarkers(data.markers);
-            // Pre-fill date fields with today's date in the format expected by <input type="date">
-            const today = new Date().toISOString().split('T')[0];
+            // Auto-fill every date marker with today's date formatted as DD/MM/YYYY
+            const today = new Date().toLocaleDateString('en-GB'); // e.g. 02/03/2026
             const initial = {};
             data.markers.forEach((m, idx) => {
               if (m.subtype === 'date') initial[idx] = today;
@@ -234,7 +234,25 @@ const SignerView = () => {
                       );
                     }
 
-                    // Text or date field — render an interactive input inside the bounding box
+                    // Date field — read-only, auto-filled with today's date (DD/MM/YYYY)
+                    if (marker.subtype === 'date') {
+                      return (
+                        <div
+                          key={marker.globalIdx}
+                          className="text-field-marker date-field-readonly"
+                          style={{ ...posStyle, borderColor: fieldColor }}
+                        >
+                          <input
+                            type="text"
+                            value={formValues[marker.globalIdx] || ''}
+                            readOnly
+                            style={{ color: fieldColor, cursor: 'default', fontWeight: 600 }}
+                          />
+                        </div>
+                      );
+                    }
+
+                    // Text field (firstName / lastName) — editable input
                     return (
                       <div
                         key={marker.globalIdx}
@@ -242,7 +260,7 @@ const SignerView = () => {
                         style={{ ...posStyle, borderColor: fieldColor }}
                       >
                         <input
-                          type={marker.subtype === 'date' ? 'date' : 'text'}
+                          type="text"
                           placeholder={getFieldLabel(marker)}
                           value={formValues[marker.globalIdx] || ''}
                           onChange={(e) =>
@@ -280,14 +298,33 @@ const SignerView = () => {
         </div>
       )}
 
-      <button 
-        onClick={handleFinish}
-        disabled={isSubmitting}
-        className="btn btn-success"
-        style={{ marginTop: '20px' }}
-      >
-        {isSubmitting ? 'Processing...' : 'Complete & Sign'}
-      </button>
+      {/* Sticky footer — always visible at the bottom while the document is being signed */}
+      <div className="action-footer">
+        <div className="action-footer-inner">
+          <p className="action-footer-status">
+            {(() => {
+              const hasSig = markers.some((m) => !m.type || m.type === 'signature');
+              const textOk = markers.every(
+                (m, idx) =>
+                  m.type !== 'text' ||
+                  m.subtype === 'date' ||
+                  (formValues[idx] && String(formValues[idx]).trim() !== '')
+              );
+              const sigOk = !hasSig || isSigned;
+              return sigOk && textOk
+                ? '✓ Ready to complete'
+                : 'Please fill all required fields';
+            })()}
+          </p>
+          <button
+            onClick={handleFinish}
+            disabled={isSubmitting}
+            className="btn btn-success"
+          >
+            {isSubmitting ? 'Processing...' : 'Finish & Sign'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

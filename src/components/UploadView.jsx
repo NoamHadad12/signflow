@@ -301,20 +301,25 @@ const UploadView = () => {
             </Document>
           </div>
           
-          {markers.length > 0 && (
-            <p style={{ color: 'var(--text-light-color)', fontSize: '0.9rem', marginTop: '10px' }}>
-              {markers.length} field{markers.length > 1 ? 's' : ''} defined.
-            </p>
-          )}
+        </div>
+      )}
 
-          <button
-            onClick={handleUpload}
-            disabled={uploading || markers.length === 0}
-            className="btn btn-primary"
-            style={{ marginTop: '20px', width: '100%' }}
-          >
-            {uploading ? 'Uploading Data...' : 'Upload & Generate Link'}
-          </button>
+      {/* Sticky footer — visible while the admin is placing fields but before the link is generated */}
+      {fileUrl && !generatedLink && (
+        <div className="action-footer">
+          <div className="action-footer-inner">
+            <p className="action-footer-status">
+              Total Fields Placed:{' '}
+              <span className="action-footer-count">{markers.length}</span>
+            </p>
+            <button
+              onClick={handleUpload}
+              disabled={uploading || markers.length === 0}
+              className="btn btn-primary"
+            >
+              {uploading ? 'Uploading...' : 'Upload & Generate Link'}
+            </button>
+          </div>
         </div>
       )}
 
