@@ -10,12 +10,28 @@ import 'react-pdf/dist/Page/TextLayer.css';
 // Set the worker source from a reliable CDN to ensure compatibility
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
+// All supported field types the admin can place on the document
+const FIELD_TYPES = [
+  { key: 'signature', label: 'Signature',  type: 'signature', subtype: 'signature', color: '#e53e3e' },
+  { key: 'firstName', label: 'First Name', type: 'text',      subtype: 'firstName', color: '#2563eb' },
+  { key: 'lastName',  label: 'Last Name',  type: 'text',      subtype: 'lastName',  color: '#7c3aed' },
+  { key: 'date',      label: 'Date',       type: 'text',      subtype: 'date',      color: '#059669' },
+];
+
+// Return the human-readable label for a given marker
+const getFieldLabel = (marker) => {
+  const ft = FIELD_TYPES.find((f) => f.subtype === marker.subtype);
+  return ft ? ft.label : 'Sign Here';
+};
+
 const UploadView = () => {
   const [file, setFile] = useState(null);
   const [fileUrl, setFileUrl] = useState(null);
   const [numPages, setNumPages] = useState(null);
-  // markers is an array of { page, nx, ny, nw, nh } — one entry per drawn box
+  // markers is an array of { type, subtype, page, nx, ny, nw, nh } — one entry per drawn box
   const [markers, setMarkers] = useState([]);
+  // The field type the admin has selected before drawing the next box
+  const [activeFieldType, setActiveFieldType] = useState('signature');
   const [uploading, setUploading] = useState(false);
   const [generatedLink, setGeneratedLink] = useState('');
   const [isCopied, setIsCopied] = useState(false);
@@ -87,9 +103,10 @@ const UploadView = () => {
     setDrawingBox(null);
     // Only add the marker if the box is large enough to be intentional (> 1% in both dimensions)
     if (boxNw > 0.01 && boxNh > 0.01) {
+      const ft = FIELD_TYPES.find((f) => f.key === activeFieldType) || FIELD_TYPES[0];
       setMarkers((prev) => [
         ...prev,
-        { page: pageNumber, nx: boxNx, ny: boxNy, nw: boxNw, nh: boxNh },
+        { type: ft.type, subtype: ft.subtype, page: pageNumber, nx: boxNx, ny: boxNy, nw: boxNw, nh: boxNh },
       ]);
     }
   };
@@ -105,7 +122,7 @@ const UploadView = () => {
       return;
     }
     if (markers.length === 0) {
-      alert('Please drag on the document to draw at least one signature area.');
+      alert('Please drag on the document to place at least one field.');
       return;
     }
     
@@ -178,11 +195,30 @@ const UploadView = () => {
       {fileUrl && !generatedLink && (
         <div style={{ marginTop: '20px' }}>
           <p style={{ fontWeight: 600, color: 'var(--primary-color)', marginBottom: '5px' }}>
-            Action Required: Click and drag on the document to draw signature areas.
+            Action Required: Select a field type, then click and drag to place it on the document.
           </p>
-          <p style={{ color: 'var(--text-light-color)', fontSize: '0.9rem', marginBottom: '15px' }}>
-            You can draw multiple boxes. Click the &times; on a box to remove it.
+          <p style={{ color: 'var(--text-light-color)', fontSize: '0.9rem', marginBottom: '10px' }}>
+            You can place multiple fields of different types. Click &times; on any field to remove it.
           </p>
+
+          {/* Field type selector — choose before drawing each box */}
+          <div className="field-type-selector">
+            {FIELD_TYPES.map((ft) => (
+              <button
+                key={ft.key}
+                className={`field-type-btn${activeFieldType === ft.key ? ' active' : ''}`}
+                onClick={() => setActiveFieldType(ft.key)}
+                style={{
+                  borderColor: ft.color,
+                  color: activeFieldType === ft.key ? 'white' : ft.color,
+                  backgroundColor: activeFieldType === ft.key ? ft.color : 'transparent',
+                }}
+              >
+                {ft.label}
+              </button>
+            ))}
+          </div>
+
           <div className="pdf-document-container" style={{ textAlign: 'center' }}>
             <Document 
               file={fileUrl} 
@@ -226,33 +262,39 @@ const UploadView = () => {
                         }}
                       />
                     )}
-                    {/* Render all confirmed markers for this page */}
-                    {pageMarkers.map((marker) => (
-                      <div
-                        key={marker.globalIndex}
-                        className="signature-marker"
-                        style={{
-                          left: `${marker.nx * 100}%`,
-                          top: `${marker.ny * 100}%`,
-                          width: `${marker.nw * 100}%`,
-                          height: `${marker.nh * 100}%`,
-                        }}
-                      >
-                        <span>Sign Here</span>
-                        {/* Remove button stops propagation so it does not start a new drag */}
-                        <button
-                          className="marker-remove-btn"
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemoveMarker(marker.globalIndex);
+                    {/* Render all confirmed markers for this page with type-specific color and label */}
+                    {pageMarkers.map((marker) => {
+                      const ft = FIELD_TYPES.find((f) => f.subtype === marker.subtype) || FIELD_TYPES[0];
+                      return (
+                        <div
+                          key={marker.globalIndex}
+                          className="signature-marker"
+                          style={{
+                            left: `${marker.nx * 100}%`,
+                            top: `${marker.ny * 100}%`,
+                            width: `${marker.nw * 100}%`,
+                            height: `${marker.nh * 100}%`,
+                            borderColor: ft.color,
+                            backgroundColor: `${ft.color}28`,
+                            color: ft.color,
                           }}
-                          title="Remove this signature area"
                         >
-                          &times;
-                        </button>
-                      </div>
-                    ))}
+                          <span>{getFieldLabel(marker)}</span>
+                          {/* Remove button stops propagation so it does not start a new drag */}
+                          <button
+                            className="marker-remove-btn"
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveMarker(marker.globalIndex);
+                            }}
+                            title={`Remove this ${ft.label} field`}
+                          >
+                            &times;
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })}
@@ -261,7 +303,7 @@ const UploadView = () => {
           
           {markers.length > 0 && (
             <p style={{ color: 'var(--text-light-color)', fontSize: '0.9rem', marginTop: '10px' }}>
-              {markers.length} signature area{markers.length > 1 ? 's' : ''} defined.
+              {markers.length} field{markers.length > 1 ? 's' : ''} defined.
             </p>
           )}
 

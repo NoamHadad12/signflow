@@ -14,6 +14,21 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
 // Resolve issue with some versions of react-signature-canvas
 const SignatureCanvas = SignaturePad.default || SignaturePad;
 
+// Return the display label for a given marker based on its subtype
+const getFieldLabel = (marker) => {
+  if (!marker.type || marker.type === 'signature') return 'Sign Here';
+  if (marker.subtype === 'firstName') return 'First Name';
+  if (marker.subtype === 'lastName') return 'Last Name';
+  if (marker.subtype === 'date') return 'Date';
+  return 'Field';
+};
+
+// Return the accent color for a given marker subtype
+const getFieldColor = (subtype) => {
+  const MAP = { signature: '#e53e3e', firstName: '#2563eb', lastName: '#7c3aed', date: '#059669' };
+  return MAP[subtype] || '#e53e3e';
+};
+
 const SignerView = () => {
   const { documentId } = useParams();
   const [pdfUrl, setPdfUrl] = useState(null);
@@ -24,6 +39,8 @@ const SignerView = () => {
   const [isCompleted, setIsCompleted] = useState(false);
   const [signedPdfUrl, setSignedPdfUrl] = useState('');
   const [isSigned, setIsSigned] = useState(false);
+  // Values collected from text and date fields; keyed by marker index
+  const [formValues, setFormValues] = useState({});
   const sigCanvas = useRef(null);
 
   useEffect(() => {
@@ -43,6 +60,13 @@ const SignerView = () => {
           // Support the new markers array and legacy single signatureCoords field
           if (Array.isArray(data.markers) && data.markers.length > 0) {
             setMarkers(data.markers);
+            // Pre-fill date fields with today's date in the format expected by <input type="date">
+            const today = new Date().toISOString().split('T')[0];
+            const initial = {};
+            data.markers.forEach((m, idx) => {
+              if (m.subtype === 'date') initial[idx] = today;
+            });
+            setFormValues(initial);
           } else if (data.signatureCoords) {
             setMarkers([data.signatureCoords]);
           }
@@ -92,20 +116,38 @@ const SignerView = () => {
   };
 
   const handleFinish = async () => {
-    if (!sigCanvas.current || sigCanvas.current.isEmpty()) {
-      alert("Please provide a signature first.");
+    const hasSignatureMarkers = markers.some((m) => !m.type || m.type === 'signature');
+
+    // Validate that the signature pad is filled when signature fields exist
+    if (hasSignatureMarkers && (!sigCanvas.current || sigCanvas.current.isEmpty())) {
+      alert('Please provide a signature first.');
       return;
+    }
+
+    // Validate that every text and date field has a value
+    for (let idx = 0; idx < markers.length; idx++) {
+      const marker = markers[idx];
+      if (marker.type === 'text') {
+        const val = formValues[idx];
+        if (!val || String(val).trim() === '') {
+          alert(`Please fill in the "${getFieldLabel(marker)}" field on page ${marker.page}.`);
+          return;
+        }
+      }
     }
 
     setIsSubmitting(true);
 
     try {
-      const signatureData = sigCanvas.current.getCanvas().toDataURL('image/png');
+      // Only capture the signature image when there are signature-type fields
+      const signatureData = hasSignatureMarkers
+        ? sigCanvas.current.getCanvas().toDataURL('image/png')
+        : null;
 
       const response = await fetch('/api/sign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documentId, signatureData, markers }),
+        body: JSON.stringify({ documentId, signatureData, markers, formValues }),
       });
 
       const result = await response.json();
@@ -160,7 +202,10 @@ const SignerView = () => {
             {Array.from(new Array(numPages), (el, index) => {
               const pageNumber = index + 1;
               // All markers assigned to this page
-              const pageMarkers = markers.filter((m) => m.page === pageNumber);
+              // Preserve the global index so formValues keys stay consistent with the markers array
+              const pageMarkers = markers
+                .map((m, globalIdx) => ({ ...m, globalIdx }))
+                .filter((m) => m.page === pageNumber);
 
               return (
                 <div key={`page_${pageNumber}`} className="pdf-page-wrapper">
@@ -170,21 +215,44 @@ const SignerView = () => {
                     renderTextLayer={false}
                     renderAnnotationLayer={false}
                   />
-                  {/* Render every marker assigned to this page */}
-                  {pageMarkers.map((marker, i) => (
-                    <div
-                      key={i}
-                      className="signature-marker"
-                      style={{
-                        left: `${marker.nx * 100}%`,
-                        top: `${marker.ny * 100}%`,
-                        width: `${marker.nw * 100}%`,
-                        height: `${marker.nh * 100}%`,
-                      }}
-                    >
-                      Sign Here
-                    </div>
-                  ))}
+                  {/* Render each marker — signature fields show a box, text/date show an inline input */}
+                  {pageMarkers.map((marker) => {
+                    const isSignature = !marker.type || marker.type === 'signature';
+                    const fieldColor = getFieldColor(marker.subtype);
+                    const posStyle = {
+                      left: `${marker.nx * 100}%`,
+                      top: `${marker.ny * 100}%`,
+                      width: `${marker.nw * 100}%`,
+                      height: `${marker.nh * 100}%`,
+                    };
+
+                    if (isSignature) {
+                      return (
+                        <div key={marker.globalIdx} className="signature-marker" style={posStyle}>
+                          Sign Here
+                        </div>
+                      );
+                    }
+
+                    // Text or date field — render an interactive input inside the bounding box
+                    return (
+                      <div
+                        key={marker.globalIdx}
+                        className="text-field-marker"
+                        style={{ ...posStyle, borderColor: fieldColor }}
+                      >
+                        <input
+                          type={marker.subtype === 'date' ? 'date' : 'text'}
+                          placeholder={getFieldLabel(marker)}
+                          value={formValues[marker.globalIdx] || ''}
+                          onChange={(e) =>
+                            setFormValues((prev) => ({ ...prev, [marker.globalIdx]: e.target.value }))
+                          }
+                          style={{ color: fieldColor }}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })}
@@ -194,20 +262,23 @@ const SignerView = () => {
         <p>Loading document from the cloud...</p>
       )}
 
-      <div className="signature-area">
-        <p style={{ textAlign: 'left', margin: '0 0 10px 5px', fontWeight: 'bold' }}>
-          Signature
-        </p>
-        <div className="signature-pad-container">
-          <SignatureCanvas 
-            ref={sigCanvas}
-            penColor='black'
-            onBegin={handleBeginStroke}
-            canvasProps={{ className: 'sigCanvas' }}
-          />
-          {!isSigned && <div className="signature-pad-placeholder">Sign Here</div>}
+      {/* Only render the signature pad when at least one signature-type marker exists */}
+      {markers.some((m) => !m.type || m.type === 'signature') && (
+        <div className="signature-area">
+          <p style={{ textAlign: 'left', margin: '0 0 10px 5px', fontWeight: 'bold' }}>
+            Signature
+          </p>
+          <div className="signature-pad-container">
+            <SignatureCanvas
+              ref={sigCanvas}
+              penColor="black"
+              onBegin={handleBeginStroke}
+              canvasProps={{ className: 'sigCanvas' }}
+            />
+            {!isSigned && <div className="signature-pad-placeholder">Sign Here</div>}
+          </div>
         </div>
-      </div>
+      )}
 
       <button 
         onClick={handleFinish}

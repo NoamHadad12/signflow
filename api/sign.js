@@ -1,4 +1,4 @@
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { initializeApp, getApps } from 'firebase/app';
 import { getStorage, ref, getBytes, uploadBytes, getDownloadURL } from 'firebase/storage';
 
@@ -15,8 +15,8 @@ const firebaseConfig = {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
 
-  // Accept the new markers array; fall back to legacy single signatureCoords object
-  const { documentId, signatureData, markers, signatureCoords } = req.body;
+  // Accept the markers array, per-field form values, and the optional signature image
+  const { documentId, signatureData, markers, signatureCoords, formValues } = req.body;
 
   // Normalize to an array so the rest of the handler always works with one format
   let resolvedMarkers = [];
@@ -36,13 +36,21 @@ export default async function handler(req, res) {
 
     // Load the PDF document for modification
     const pdfDoc = await PDFDocument.load(existingPdfBytes);
-    const base64Data = signatureData.split(',')[1];
-    const signatureImage = await pdfDoc.embedPng(Buffer.from(base64Data, 'base64'));
+
+    // Embed the signature image only when the signer provided one
+    let signatureImage = null;
+    if (signatureData) {
+      const base64Data = signatureData.split(',')[1];
+      signatureImage = await pdfDoc.embedPng(Buffer.from(base64Data, 'base64'));
+    }
+
+    // Embed a standard font for rendering text and date fields
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
     const pages = pdfDoc.getPages();
 
-    // Draw the signature image at every marker location defined by the admin
-    for (const marker of resolvedMarkers) {
+    // Draw each field at its marker location
+    for (const [markerIndex, marker] of resolvedMarkers.entries()) {
       // Convert 1-based page number to 0-based index; default to the last page
       const targetPageIndex = marker.page != null ? marker.page - 1 : pages.length - 1;
       const targetPage = pages[targetPageIndex];
@@ -52,7 +60,7 @@ export default async function handler(req, res) {
       const { width, height } = targetPage.getSize();
 
       // Scale the bounding box from normalized units to PDF point units
-      const sigWidth = (marker.nw ?? 0.3) * width;
+      const sigWidth  = (marker.nw ?? 0.3)  * width;
       const sigHeight = (marker.nh ?? 0.08) * height;
 
       // Map normalized top-left (nx, ny) to pdf-lib coordinates.
@@ -60,15 +68,51 @@ export default async function handler(req, res) {
       const targetX = (marker.nx ?? 0) * width;
       const targetY = (1 - (marker.ny ?? 0) - (marker.nh ?? 0.08)) * height;
 
-      // Draw the signature PNG scaled exactly to the admin-defined bounding box.
-      // No decorative underline — the signature floats as a transparent PNG.
-      targetPage.drawImage(signatureImage, {
-        x: targetX,
-        y: targetY,
-        width: sigWidth,
-        height: sigHeight,
-        opacity: 0.95,
-      });
+      const isSignature = !marker.type || marker.type === 'signature';
+
+      if (isSignature) {
+        // Draw the signature PNG floating without any background or underline
+        if (signatureImage) {
+          targetPage.drawImage(signatureImage, {
+            x: targetX,
+            y: targetY,
+            width: sigWidth,
+            height: sigHeight,
+            opacity: 0.95,
+          });
+        }
+      } else if (marker.type === 'text') {
+        // Retrieve the value the signer entered for this field
+        const rawValue =
+          formValues && formValues[markerIndex] != null ? String(formValues[markerIndex]) : '';
+
+        // Format ISO date strings (YYYY-MM-DD) into a human-readable form for the PDF
+        let displayValue = rawValue;
+        if (marker.subtype === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(rawValue)) {
+          const [year, month, day] = rawValue.split('-');
+          const dateObj = new Date(Number(year), Number(month) - 1, Number(day));
+          displayValue = dateObj.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          });
+        }
+
+        if (displayValue) {
+          // Scale font size proportionally to the box height; clamp between 8 pt and 20 pt
+          const fontSize = Math.max(8, Math.min(sigHeight * 0.55, 20));
+          // Vertically center the text baseline within the bounding box
+          const textY = targetY + (sigHeight - fontSize) / 2;
+          targetPage.drawText(displayValue, {
+            x: targetX + 4,
+            y: textY,
+            size: fontSize,
+            font,
+            color: rgb(0.05, 0.05, 0.05),
+            maxWidth: sigWidth - 8,
+          });
+        }
+      }
     }
 
     // Serialize the modified PDF and upload it to Firebase Storage
