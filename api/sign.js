@@ -84,7 +84,6 @@ const keywords = [
           // item.transform[4] is X, item.transform[5] is Y
           targetX = item.transform[4];
           targetY = item.transform[5];
-          console.log(`Found keyword "${textStr}" at X: ${targetX}, Y: ${targetY}`);
           break; // Stop searching once found
         }
       }

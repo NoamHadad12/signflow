@@ -1,0 +1,22 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Match all files in the 'pdfs' folder
+    match /pdfs/{allPaths=**} {
+      // Allow anyone to read files. This is necessary for users to view documents via a shared link.
+      allow read;
+
+      // Allow write (create/update) operations only if:
+      // 1. The user is creating a new file (request.resource is null).
+      // 2. The uploaded file is a PDF.
+      // 3. The file size is less than 5MB.
+      allow write: if request.resource == null 
+                   && request.resource.contentType == 'application/pdf'
+                   && request.resource.size < 5 * 1024 * 1024;
+      
+      // Explicitly deny delete operations to prevent unauthorized removal of documents.
+      allow delete: if false;
+    }
+  }
+}

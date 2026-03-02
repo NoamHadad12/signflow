@@ -14,8 +14,6 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
 const SignatureCanvas = SignaturePad.default || SignaturePad;
 
 const SignerView = () => {
-  console.log("!!! DEBUG: SignerView component is rendering !!!");
-
   const { documentId } = useParams();
   const [pdfUrl, setPdfUrl] = useState(null);
   const [numPages, setNumPages] = useState(null);
@@ -30,7 +28,6 @@ const SignerView = () => {
       if (!documentId) return;
 
       try {
-        console.log("Attempting to fetch PDF for ID:", documentId);
         const fileRef = ref(storage, `pdfs/${documentId}.pdf`);
         
         // Get the authenticated download URL
@@ -50,11 +47,10 @@ const SignerView = () => {
         const blob = await response.blob();
         const blobUrl = URL.createObjectURL(blob);
         
-        console.log("SUCCESS! PDF Blob URL created:", blobUrl);
         setPdfUrl(blobUrl);
 
       } catch (error) {
-        console.error("FIREBASE/FETCH ERROR:", error);
+        console.error("Error fetching document:", error);
       }
     };
 
