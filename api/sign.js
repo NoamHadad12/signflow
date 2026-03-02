@@ -1,11 +1,6 @@
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
-// fontkit is no longer needed for standard fonts
-// import fontkit from '@pdf-lib/fontkit'; 
 import { initializeApp, getApps } from 'firebase/app';
 import { getStorage, ref, getBytes, uploadBytes, getDownloadURL } from 'firebase/storage';
-
-// Import pdfjs-dist for text extraction
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 const firebaseConfig = {
   apiKey: process.env.VITE_FIREBASE_API_KEY,
@@ -20,7 +15,7 @@ const firebaseConfig = {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
 
-  const { documentId, signatureData } = req.body;
+  const { documentId, signatureData, signatureCoords } = req.body;
 
   try {
     const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
@@ -36,97 +31,65 @@ export default async function handler(req, res) {
     const signatureImage = await pdfDoc.embedPng(Buffer.from(base64Data, 'base64'));
 
     const pages = pdfDoc.getPages();
-    const lastPage = pages[pages.length - 1];
-    const { width, height } = lastPage.getSize();
-
-    // 3. Search for Keywords using pdfjs-dist
-    let targetX = width - 150 - 15; // Default X (bottom right)
-    let targetY = 30;               // Default Y (bottom right)
     
-const keywords = [
-  // English - Direct Instructions
-  "sign here", 
-  "signature", 
-  "signatory", 
-  "initials", 
-  "signed by",
-  "execute here",
-  "witness signature",
-  "authorized signature",
-  "print name",
-  
-  // Hebrew - Direct Instructions
-  "חתום כאן", 
-  "חתימה", 
-  "חתימת הלקוח", 
-  "חתימת השוכר", 
-  "חתימת המוכר",
-  "חתימת המצהיר",
-  "שם וחתימה",
-  "חתימת המורשה",
-  "חתימה וחותמת",
-  "ראשי תיבות",
-  "אישור",
-];    
-    try {
-      // Load document into the text scanner
-      const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(existingPdfBytes) });
-      const doc = await loadingTask.promise;
-      const targetPageNum = pages.length; // Scan the last page
-      const page = await doc.getPage(targetPageNum);
-      const textContent = await page.getTextContent();
+    // Choose specific page based on uploaded configuration (convert 1-based index to 0-based index)
+    const targetPageNum = signatureCoords ? signatureCoords.page - 1 : pages.length - 1;
+    const targetPage = pages[targetPageNum];
+    const { width, height } = targetPage.getSize();
 
-      // Iterate over text items to find keywords
-      for (const item of textContent.items) {
-        const textStr = item.str.toLowerCase().trim();
-        // Check if the current text block contains any of our keywords
-        if (keywords.some(keyword => textStr.includes(keyword))) {
-          // item.transform[4] is X, item.transform[5] is Y
-          targetX = item.transform[4];
-          targetY = item.transform[5];
-          break; // Stop searching once found
-        }
-      }
-    } catch (scanError) {
-      console.warn("Text scanning failed or skipped, using default placement:", scanError.message);
-    }
-
-    // 4. Define signature area dimensions and draw elements
-    const sigWidth = 150; // Slightly wider for better presence
+    // 3. Define signature area dimensions and draw elements
+    const sigWidth = 150; 
     const sigHeight = 50;
     const boxPadding = 5;
-    const sigY = targetY + 15; // Adjust vertical placement
 
-    // --- REVERT TO STANDARD FONT FOR ENGLISH ---
+    // Default target bottom-right fallback
+    let targetX = width - sigWidth - 15; 
+    let targetY = 30;               
+
+    // Map relative click percentage coordinates to native point scales
+    if (signatureCoords) {
+      // Scale percentages by real document PDF widths
+      const centerX = signatureCoords.nx * width;
+      // pdf-lib's Y-Axis runs bottom-to-top naturally (reverse of standard CSS/DOM)
+      const centerY = (1 - signatureCoords.ny) * height; 
+
+      // Offset the coordinate by half width/height because the uploader clicked exactly at the box center
+      targetX = centerX - (sigWidth / 2);
+      targetY = centerY - (sigHeight / 2);
+    }
+    
+    const sigY = targetY;
+
+    // Utilize the standard font for the signature label
     const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
     // Draw the "Signature" label with a clean, bold look
-    lastPage.drawText('Signature', {
+    targetPage.drawText('Signature', {
       x: targetX,
       y: sigY + sigHeight + boxPadding, // Position text above the signature area
-      font: font, // Use the standard Helvetica-Bold font
+      font: font, 
       size: 12,
       color: rgb(0.1, 0.1, 0.1),
     });
 
     // Draw the signature image, making it appear bolder
-    lastPage.drawImage(signatureImage, {
+    targetPage.drawImage(signatureImage, {
       x: targetX,
       y: sigY,
       width: sigWidth,
       height: sigHeight,
-      opacity: 0.95, // Increase opacity to make the signature bolder
+      opacity: 0.95, 
     });
 
     // Draw a thicker line below the signature for a professional finish
-    lastPage.drawLine({
+    targetPage.drawLine({
         start: { x: targetX, y: sigY - boxPadding + 2 },
         end: { x: targetX + sigWidth, y: sigY - boxPadding + 2 },
-        thickness: 1.5, // Thicker line
+        thickness: 1.5, 
         color: rgb(0.1, 0.1, 0.1),
     });
 
-    // 5. Save and Upload
+    // 4. Save and Upload
     const pdfBytes = await pdfDoc.save();
     const signedFileRef = ref(storage, `pdfs/signed_${documentId}.pdf`);
     

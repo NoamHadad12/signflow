@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { storage } from '../firebase';
+import { storage, db } from '../firebase';
 import { ref, getDownloadURL } from 'firebase/storage';
+import { doc, getDoc } from 'firebase/firestore';
 import { Document, Page, pdfjs } from 'react-pdf';
 import SignaturePad from 'react-signature-canvas';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
@@ -16,6 +17,7 @@ const SignatureCanvas = SignaturePad.default || SignaturePad;
 const SignerView = () => {
   const { documentId } = useParams();
   const [pdfUrl, setPdfUrl] = useState(null);
+  const [signatureCoords, setSignatureCoords] = useState(null);
   const [numPages, setNumPages] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
@@ -27,7 +29,15 @@ const SignerView = () => {
     const fetchDocument = async () => {
       if (!documentId) return;
 
-      try {
+      tr// Fetch placement metadata from Firestore
+        const docRef = doc(db, "documents", documentId);
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists() && docSnap.data().signatureCoords) {
+          setSignatureCoords(docSnap.data().signatureCoords);
+        }
+
+        y {
         const fileRef = ref(storage, `pdfs/${documentId}.pdf`);
         
         // Get the authenticated download URL
@@ -77,6 +87,10 @@ const SignerView = () => {
     }
 
     setIsSubmitting(true);
+          documentId, 
+          signatureData,
+          signatureCoords
+       
 
     try {
       const signatureData = sigCanvas.current.getCanvas().toDataURL('image/png');
@@ -117,22 +131,38 @@ const SignerView = () => {
           target="_blank" 
           rel="noopener noreferrer"
           className="btn btn-primary"
-        >
-          Download Your Copy
-        </a>
-      </div>
-    );
-  }
-
-  return (
-    <div className="signer-view">
-      <h1>Sign Document</h1>
-      
-      {pdfUrl ? (
-        <div className="pdf-document-container">
+        > style={{ textAlign: 'center' }}>
           <Document 
             file={pdfUrl} 
             onLoadSuccess={onDocumentLoadSuccess}
+            loading={<div>Loading PDF...</div>}
+            error={<div>Failed to load PDF. Check CORS settings in Firebase.</div>}
+          >
+            {Array.from(new Array(numPages), (el, index) => {
+              const pageNumber = index + 1;
+              return (
+                <div key={`page_${pageNumber}`} className="pdf-page-wrapper">
+                  <Page 
+                    pageNumber={pageNumber} 
+                    width={Math.min(window.innerWidth - 40, 600)} 
+                    renderTextLayer={false} 
+                    renderAnnotationLayer={false} 
+                  />
+                  {/* Overlay the bounding box so the client knows exactly where their line goes */}
+                  {signatureCoords && signatureCoords.page === pageNumber && (
+                    <div 
+                      className="signature-marker" 
+                      style={{
+                        left: `${signatureCoords.nx * 100}%`,
+                        top: `${signatureCoords.ny * 100}%`
+                      }}
+                    >
+                      Sign Here
+                    </div>
+                  )}
+                </div>
+              );
+            }nLoadSuccess={onDocumentLoadSuccess}
             loading={<div>Loading PDF...</div>}
             error={<div>Failed to load PDF. Check CORS settings in Firebase.</div>}
           >

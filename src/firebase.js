@@ -2,6 +2,7 @@
 import { initializeApp } from "firebase/app";
 // Import the Storage service to handle PDF uploads
 import { getStorage } from "firebase/storage";
+import { getFirestore } from "firebase/firestore";
 import { getAnalytics, isSupported } from "firebase/analytics";
 
 // Pull the configuration from the hidden .env.local file
@@ -26,6 +27,7 @@ isSupported().then((supported) => {
   }
 });
 
-// Initialize Cloud Storage and export it so other files can use it
+// Initialize Cloud Storage and Firestore and export them
 export const storage = getStorage(app);
+export const db = getFirestore(app);
 
