@@ -39,9 +39,17 @@ const SignerView = () => {
   const [isCompleted, setIsCompleted] = useState(false);
   const [signedPdfUrl, setSignedPdfUrl] = useState('');
   const [isSigned, setIsSigned] = useState(false);
-  // Values collected from text and date fields; keyed by marker index
-  const [formValues, setFormValues] = useState({});
+  // Single global value per field subtype — changing one populates every marker of that subtype
+  const [globalFields, setGlobalFields] = useState({
+    firstName: '',
+    lastName: '',
+    date: new Date().toLocaleDateString('en-GB'), // Auto-filled as DD/MM/YYYY
+  });
   const sigCanvas = useRef(null);
+
+  // Helper: update one key inside globalFields
+  const setField = (key, value) =>
+    setGlobalFields((prev) => ({ ...prev, [key]: value }));
 
   useEffect(() => {
     // Track the object URL so the cleanup function can revoke it without a stale closure
@@ -60,13 +68,7 @@ const SignerView = () => {
           // Support the new markers array and legacy single signatureCoords field
           if (Array.isArray(data.markers) && data.markers.length > 0) {
             setMarkers(data.markers);
-            // Auto-fill every date marker with today's date formatted as DD/MM/YYYY
-            const today = new Date().toLocaleDateString('en-GB'); // e.g. 02/03/2026
-            const initial = {};
-            data.markers.forEach((m, idx) => {
-              if (m.subtype === 'date') initial[idx] = today;
-            });
-            setFormValues(initial);
+            // Date is already pre-filled in globalFields state initialiser; nothing extra needed.
           } else if (data.signatureCoords) {
             setMarkers([data.signatureCoords]);
           }
@@ -117,29 +119,35 @@ const SignerView = () => {
 
   const handleFinish = async () => {
     const hasSignatureMarkers = markers.some((m) => !m.type || m.type === 'signature');
+    const hasFirstName = markers.some((m) => m.subtype === 'firstName');
+    const hasLastName  = markers.some((m) => m.subtype === 'lastName');
 
-    // Validate that the signature pad is filled when signature fields exist
+    // Validate signature pad
     if (hasSignatureMarkers && (!sigCanvas.current || sigCanvas.current.isEmpty())) {
       alert('Please provide a signature first.');
       return;
     }
-
-    // Validate that every text and date field has a value
-    for (let idx = 0; idx < markers.length; idx++) {
-      const marker = markers[idx];
-      if (marker.type === 'text') {
-        const val = formValues[idx];
-        if (!val || String(val).trim() === '') {
-          alert(`Please fill in the "${getFieldLabel(marker)}" field on page ${marker.page}.`);
-          return;
-        }
-      }
+    // Validate required text fields
+    if (hasFirstName && !globalFields.firstName.trim()) {
+      alert('Please enter your First Name in the footer bar.');
+      return;
+    }
+    if (hasLastName && !globalFields.lastName.trim()) {
+      alert('Please enter your Last Name in the footer bar.');
+      return;
     }
 
     setIsSubmitting(true);
 
     try {
-      // Only capture the signature image when there are signature-type fields
+      // Build a per-marker-index formValues map that the API expects
+      const formValues = {};
+      markers.forEach((m, idx) => {
+        if (m.subtype === 'firstName') formValues[idx] = globalFields.firstName;
+        else if (m.subtype === 'lastName') formValues[idx] = globalFields.lastName;
+        else if (m.subtype === 'date')      formValues[idx] = globalFields.date;
+      });
+
       const signatureData = hasSignatureMarkers
         ? sigCanvas.current.getCanvas().toDataURL('image/png')
         : null;
@@ -215,7 +223,8 @@ const SignerView = () => {
                     renderTextLayer={false}
                     renderAnnotationLayer={false}
                   />
-                  {/* Render each marker — signature fields show a box, text/date show an inline input */}
+                  {/* Render each marker using the unified signature-marker style.
+                      For text/date markers the live value from globalFields is displayed. */}
                   {pageMarkers.map((marker) => {
                     const isSignature = !marker.type || marker.type === 'signature';
                     const fieldColor = getFieldColor(marker.subtype);
@@ -226,48 +235,30 @@ const SignerView = () => {
                       height: `${marker.nh * 100}%`,
                     };
 
+                    // Determine the text to display inside the overlay box
+                    let overlayText;
                     if (isSignature) {
-                      return (
-                        <div key={marker.globalIdx} className="signature-marker" style={posStyle}>
-                          Sign Here
-                        </div>
-                      );
+                      overlayText = 'Sign Here';
+                    } else {
+                      const liveValue = globalFields[marker.subtype] || '';
+                      overlayText = liveValue || getFieldLabel(marker);
                     }
 
-                    // Date field — read-only, auto-filled with today's date (DD/MM/YYYY)
-                    if (marker.subtype === 'date') {
-                      return (
-                        <div
-                          key={marker.globalIdx}
-                          className="text-field-marker date-field-readonly"
-                          style={{ ...posStyle, borderColor: fieldColor }}
-                        >
-                          <input
-                            type="text"
-                            value={formValues[marker.globalIdx] || ''}
-                            readOnly
-                            style={{ color: fieldColor, cursor: 'default', fontWeight: 600 }}
-                          />
-                        </div>
-                      );
-                    }
-
-                    // Text field (firstName / lastName) — editable input
                     return (
                       <div
                         key={marker.globalIdx}
-                        className="text-field-marker"
-                        style={{ ...posStyle, borderColor: fieldColor }}
+                        className="signature-marker"
+                        style={{
+                          ...posStyle,
+                          borderColor: fieldColor,
+                          backgroundColor: `${fieldColor}28`,
+                          color: fieldColor,
+                          // Show italic placeholder style when no value has been entered yet
+                          fontStyle: (!isSignature && !globalFields[marker.subtype]) ? 'italic' : 'normal',
+                          fontWeight: (!isSignature && globalFields[marker.subtype]) ? 700 : 600,
+                        }}
                       >
-                        <input
-                          type="text"
-                          placeholder={getFieldLabel(marker)}
-                          value={formValues[marker.globalIdx] || ''}
-                          onChange={(e) =>
-                            setFormValues((prev) => ({ ...prev, [marker.globalIdx]: e.target.value }))
-                          }
-                          style={{ color: fieldColor }}
-                        />
+                        {overlayText}
                       </div>
                     );
                   })}
@@ -301,28 +292,75 @@ const SignerView = () => {
       {/* Sticky footer — always visible at the bottom while the document is being signed */}
       <div className="action-footer">
         <div className="action-footer-inner">
-          <p className="action-footer-status">
-            {(() => {
-              const hasSig = markers.some((m) => !m.type || m.type === 'signature');
-              const textOk = markers.every(
-                (m, idx) =>
-                  m.type !== 'text' ||
-                  m.subtype === 'date' ||
-                  (formValues[idx] && String(formValues[idx]).trim() !== '')
-              );
-              const sigOk = !hasSig || isSigned;
-              return sigOk && textOk
-                ? '✓ Ready to complete'
-                : 'Please fill all required fields';
-            })()}
-          </p>
-          <button
-            onClick={handleFinish}
-            disabled={isSubmitting}
-            className="btn btn-success"
-          >
-            {isSubmitting ? 'Processing...' : 'Finish & Sign'}
-          </button>
+
+          {/* Row 1: global text field inputs — only render each when markers of that type exist */}
+          {(markers.some((m) => m.subtype === 'firstName' || m.subtype === 'lastName' || m.subtype === 'date')) && (
+            <div className="footer-fields">
+              {markers.some((m) => m.subtype === 'firstName') && (
+                <div className="footer-input-group">
+                  <label className="footer-input-label" style={{ color: '#2563eb' }}>First Name</label>
+                  <input
+                    className="footer-input"
+                    type="text"
+                    placeholder="Your first name"
+                    value={globalFields.firstName}
+                    onChange={(e) => setField('firstName', e.target.value)}
+                    style={{ borderColor: '#2563eb' }}
+                  />
+                </div>
+              )}
+              {markers.some((m) => m.subtype === 'lastName') && (
+                <div className="footer-input-group">
+                  <label className="footer-input-label" style={{ color: '#7c3aed' }}>Last Name</label>
+                  <input
+                    className="footer-input"
+                    type="text"
+                    placeholder="Your last name"
+                    value={globalFields.lastName}
+                    onChange={(e) => setField('lastName', e.target.value)}
+                    style={{ borderColor: '#7c3aed' }}
+                  />
+                </div>
+              )}
+              {markers.some((m) => m.subtype === 'date') && (
+                <div className="footer-input-group">
+                  <label className="footer-input-label" style={{ color: '#059669' }}>Date</label>
+                  <input
+                    className="footer-input footer-input--readonly"
+                    type="text"
+                    value={globalFields.date}
+                    readOnly
+                    style={{ borderColor: '#059669', color: '#059669' }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Row 2: status message and action button */}
+          <div className="footer-action-row">
+            <p className="action-footer-status">
+              {(() => {
+                const hasSig      = markers.some((m) => !m.type || m.type === 'signature');
+                const needsFName  = markers.some((m) => m.subtype === 'firstName');
+                const needsLName  = markers.some((m) => m.subtype === 'lastName');
+                const sigOk   = !hasSig  || isSigned;
+                const fnameOk = !needsFName || globalFields.firstName.trim() !== '';
+                const lnameOk = !needsLName || globalFields.lastName.trim() !== '';
+                return sigOk && fnameOk && lnameOk
+                  ? '\u2713 Ready to complete'
+                  : 'Please fill all required fields';
+              })()}
+            </p>
+            <button
+              onClick={handleFinish}
+              disabled={isSubmitting}
+              className="btn btn-success"
+            >
+              {isSubmitting ? 'Processing...' : 'Finish & Sign'}
+            </button>
+          </div>
+
         </div>
       </div>
     </div>

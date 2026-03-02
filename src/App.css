@@ -341,13 +341,14 @@ body {
   margin-bottom: 30px;
 }
 
-/* Extra bottom padding so page content is never hidden behind the sticky footer */
+/* Extra bottom padding so page content is never hidden behind the sticky footer.
+   SignerView footer is taller now (it contains the field inputs), so it needs more room. */
 .upload-view {
   padding-bottom: 110px;
 }
 
 .signer-view {
-  padding-bottom: 110px;
+  padding-bottom: 175px;
 }
 
 /* Sticky action footer bar — shared by UploadView and SignerView */
@@ -365,7 +366,62 @@ body {
 .action-footer-inner {
   max-width: 750px;
   margin: 0 auto;
-  padding: 14px 24px;
+  padding: 10px 24px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Row that holds the global text-field inputs (First Name, Last Name, Date) */
+.footer-fields {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.footer-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 120px;
+}
+
+.footer-input-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.footer-input {
+  padding: 6px 10px;
+  border: 1.5px solid var(--border-color);
+  border-radius: 6px;
+  font-family: var(--font-family);
+  font-size: 0.9rem;
+  font-weight: 500;
+  outline: none;
+  background: #fafafa;
+  transition: border-color 0.15s;
+  color: var(--text-color);
+}
+
+.footer-input:focus {
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.15);
+}
+
+.footer-input--readonly {
+  cursor: default;
+  background: #f0fdf8;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+/* Row that holds the status text and the action button */
+.footer-action-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -420,11 +476,24 @@ body {
     align-items: stretch;
   }
   .action-footer-inner {
-    padding: 12px 16px;
-    gap: 10px;
+    padding: 10px 14px 12px;
+    gap: 8px;
   }
   .action-footer-status {
-    font-size: 0.85rem;
+    font-size: 0.82rem;
+  }
+  .footer-fields {
+    gap: 8px;
+  }
+  .footer-input-group {
+    min-width: 100px;
+  }
+  .footer-input {
+    font-size: 0.82rem;
+    padding: 5px 8px;
+  }
+  .signer-view {
+    padding-bottom: 200px;
   }
 }
 
