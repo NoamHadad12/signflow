@@ -42,21 +42,27 @@ export const config = {
 // Temperature is set very low so the model outputs deterministic JSON.
 // ---------------------------------------------------------------------------
 async function callGemini(base64Pdf) {
-  // Trim the key to eliminate hidden newlines or spaces that Vercel can inject.
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
-  if (!apiKey) {
+  // Force trim to eliminate hidden newlines or spaces Vercel can inject into env vars.
+  const key = (process.env.GEMINI_API_KEY || '').trim();
+  if (!key) {
     throw new Error('GEMINI_API_KEY environment variable is not set on the server.');
   }
 
   // gemini-2.0-flash is the stable, generally-available model as of 2026.
   // Explicitly passing apiVersion: 'v1' forces the SDK away from its default
   // v1beta endpoint, which returns 404 for GA models.
-  const MODEL = 'gemini-2.0-flash';
-  console.log(`[analyze-pdf] Model: ${MODEL} | Key prefix: ${apiKey.slice(0, 4)}...`);
+  const modelName = 'gemini-2.0-flash';
+  console.log('Attempting Gemini call with model:', modelName);
+  console.log(`[analyze-pdf] Key prefix: ${key.slice(0, 4)}...`);
 
-  const genAI = new GoogleGenerativeAI(apiKey, { apiVersion: 'v1' });
+  // Strip any data-URI prefix the frontend may have included, e.g.:
+  // "data:application/pdf;base64,JVBERi0x..."
+  // The Gemini SDK expects the raw base64 string only.
+  const cleanBase64 = base64Pdf.replace(/^data:[^;]+;base64,/, '');
+
+  const genAI = new GoogleGenerativeAI(key, { apiVersion: 'v1' });
   const model = genAI.getGenerativeModel({
-    model: MODEL,
+    model: modelName,
     generationConfig: {
       temperature:     0.05,  // Near-zero temperature for deterministic structured output
       maxOutputTokens: 2048,
@@ -96,14 +102,13 @@ Example valid output:
 ]`;
 
   // Send the prompt text + PDF inline data to Gemini via the SDK.
-  // The SDK automatically selects the correct REST endpoint and API version.
+  // cleanBase64 has had any data-URI prefix stripped, so only raw base64 is sent.
   const result = await model.generateContent([
     { text: SYSTEM_PROMPT },
     {
       inlineData: {
-        // Gemini 1.5 natively supports PDF — no image conversion step required
         mimeType: 'application/pdf',
-        data:     base64Pdf,
+        data:     cleanBase64,
       },
     },
   ]);
