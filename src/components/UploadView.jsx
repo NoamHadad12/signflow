@@ -54,6 +54,8 @@ const UploadView = () => {
   const windowWidth = useWindowWidth();
 
   const [isDrawing, setIsDrawing] = useState(false);
+  // Tracks which suggestion (by ID) is currently being dragged to reposition it
+  const [draggingId, setDraggingId] = useState(null);
   const [drawStart, setDrawStart] = useState(null);
   const [drawingBox, setDrawingBox] = useState(null);
   const currentPageRef = useRef(null);
@@ -643,10 +645,22 @@ const UploadView = () => {
                   <div
                     key={`page_${pageNumber}`}
                     className="pdf-page-wrapper"
-                    style={{ cursor: 'crosshair', userSelect: 'none' }}
+                    style={{ cursor: draggingId ? 'grabbing' : 'crosshair', userSelect: 'none' }}
                     onMouseDown={(e) => handleMouseDown(e, pageNumber)}
                     onMouseMove={(e) => handleMouseMove(e, pageNumber)}
                     onMouseUp={(e) => handleMouseUp(e, pageNumber)}
+                    onPointerMove={(e) => {
+                      // Reposition the dragged suggestion using fractional coordinates
+                      if (!draggingId) return;
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const newNx = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                      const newNy = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+                      setSuggestions((prev) =>
+                        prev.map((s) => s.id === draggingId ? { ...s, nx: newNx, ny: newNy } : s)
+                      );
+                    }}
+                    onPointerUp={() => setDraggingId(null)}
+                    onPointerLeave={() => setDraggingId(null)}
                   >
                     <Page
                       pageNumber={pageNumber}
@@ -717,6 +731,11 @@ const UploadView = () => {
                           <div
                             key={suggestion.id}
                             onMouseDown={(e) => e.stopPropagation()} // Prevent drawing a new box when clicking ghost controls
+                            onPointerDown={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault(); // Prevent text selection during drag
+                              setDraggingId(suggestion.id);
+                            }}
                             style={{
                               position:        'absolute',
                               left:            `${suggestion.nx * 100}%`,
@@ -729,6 +748,7 @@ const UploadView = () => {
                               boxSizing:       'border-box',
                               pointerEvents:   'all',
                               zIndex:          10,
+                              cursor:          draggingId === suggestion.id ? 'grabbing' : 'grab',
                             }}
                           >
                             {/* Label row inside the ghost box */}
