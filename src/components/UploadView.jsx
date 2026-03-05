@@ -167,11 +167,21 @@ const UploadView = () => {
     setSuggestions([]);
 
     try {
-      // Read the file as an ArrayBuffer and convert to base64 for the API
-      const buffer    = await file.arrayBuffer();
-      const base64Pdf = btoa(
-        new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-      );
+      // Use FileReader instead of btoa() + Uint8Array.
+      // btoa() throws "Invalid character" on binary PDFs larger than ~1 MB because
+      // it cannot handle raw byte values above 0x7F.
+      // FileReader.readAsDataURL() handles arbitrary binary data correctly and
+      // returns a safe data-URI; we strip the prefix so only raw base64 is sent.
+      const base64Pdf = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload  = () => {
+          // result format: "data:application/pdf;base64,JVBERi0x..."
+          // Split at the comma and take everything after it (raw base64 only).
+          resolve(reader.result.split(',')[1]);
+        };
+        reader.onerror = () => reject(new Error('FileReader failed to read the PDF.'));
+        reader.readAsDataURL(file);
+      });
 
       const response = await fetch('/api/analyze-pdf', {
         method:  'POST',

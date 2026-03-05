@@ -44,21 +44,32 @@ export const config = {
 async function callGemini(base64Pdf) {
   // Force trim to eliminate hidden newlines or spaces Vercel can inject into env vars.
   const key = (process.env.GEMINI_API_KEY || '').trim();
-  if (!key) {
-    throw new Error('GEMINI_API_KEY environment variable is not set on the server.');
+
+  // Guard: fail immediately if the key is missing or looks like an unexpanded
+  // template literal such as "${GEMINI_API_KEY}" — a common misconfiguration.
+  if (!key || key.startsWith('${')) {
+    throw new Error('GEMINI_API_KEY is not set or was not expanded by the environment.');
   }
 
-  // gemini-2.0-flash is the stable, generally-available model as of 2026.
-  // Explicitly passing apiVersion: 'v1' forces the SDK away from its default
-  // v1beta endpoint, which returns 404 for GA models.
-  const modelName = 'gemini-2.0-flash';
-  console.log('Attempting Gemini call with model:', modelName);
-  console.log(`[analyze-pdf] Key prefix: ${key.slice(0, 4)}...`);
+  // Downgraded from gemini-2.0-flash → gemini-1.5-flash-8b.
+  // New free-tier accounts in most regions have a literal quota of 0 for the
+  // 2.0 model, while 1.5-flash-8b has a generous free quota that is almost
+  // always open — this is the root cause of the "limit: 0" 429 responses.
+  const modelName = 'gemini-1.5-flash-8b';
+  console.log('[analyze-pdf] Using model:', modelName);
+  console.log(`[analyze-pdf] Key prefix: ${key.slice(0, 6)}...`);
 
   // Strip any data-URI prefix the frontend may have included, e.g.:
   // "data:application/pdf;base64,JVBERi0x..."
   // The Gemini SDK expects the raw base64 string only.
-  const cleanBase64 = base64Pdf.replace(/^data:[^;]+;base64,/, '');
+  const cleanBase64 = base64Pdf.replace(/^data:[^;]+;base64,/, '').trim();
+
+  // Validate that the cleaned string looks like real base64 content.
+  // An empty or suspiciously short string causes Gemini to return a confusing
+  // quota / parse error rather than a clear 400 bad-request response.
+  if (!cleanBase64 || cleanBase64.length < 100) {
+    throw new Error('base64Pdf appears to be empty or too short after stripping the data-URI prefix.');
+  }
 
   const genAI = new GoogleGenerativeAI(key, { apiVersion: 'v1' });
   const model = genAI.getGenerativeModel({
