@@ -17,6 +17,12 @@ export const config = {
 };
 
 // ---------------------------------------------------------------------------
+// Override Vercel Serverless Function Default Timeout (10s)
+// Allow up to 60 seconds to accommodate slower AI responses.
+// ---------------------------------------------------------------------------
+export const maxDuration = 60;
+
+// ---------------------------------------------------------------------------
 // callGemini
 // Sends the raw PDF (as base64) to Gemini 2.5 Flash via the official SDK.
 // ---------------------------------------------------------------------------
