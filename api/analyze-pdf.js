@@ -66,7 +66,7 @@ async function callGemini(base64Pdf) {
  // ---------------------------------------------------------------------------
   // Prompt engineering - Optimized for visually reversed Hebrew text
   // ---------------------------------------------------------------------------
-  const SYSTEM_PROMPT = `Extract form fields. The Hebrew text is reversed (e.g., 'תאריך' is 'דיראת', 'חתימה' is 'המיתח'). Return ONLY a raw JSON array using this exact schema: [{"type": "signature"|"date"|"customText", "label": "string", "nx": 0.5, "ny": 0.5, "nw": 0.2, "nh": 0.05, "page": 1}].`;
+  const SYSTEM_PROMPT = `You are a visual document layout analyzer. Find every blank horizontal line or designated area intended for signatures, dates, or user input. You MUST calculate the ACTUAL fractional coordinates (0.0 to 1.0) for each field's location on the page. Return ONLY a valid JSON array of objects. Schema: [{"type": "signature"|"date"|"customText", "label": "Detected Field Name", "nx": ACTUAL_X_FRACTION, "ny": ACTUAL_Y_FRACTION, "nw": WIDTH_FRACTION, "nh": HEIGHT_FRACTION, "page": 1}]. DO NOT output 0.5 unless the field is exactly in the dead center.`;
 
   console.log("[FINAL TEST] Calling Gemini v1beta with model: gemini-2.5-flash");
 
