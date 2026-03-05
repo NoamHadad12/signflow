@@ -42,17 +42,19 @@ export const config = {
 // Temperature is set very low so the model outputs deterministic JSON.
 // ---------------------------------------------------------------------------
 async function callGemini(base64Pdf) {
-  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-  if (!GEMINI_API_KEY) {
+  // Trim the key to eliminate hidden newlines or spaces that Vercel can inject.
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  if (!apiKey) {
     throw new Error('GEMINI_API_KEY environment variable is not set on the server.');
   }
 
-  // Use the official SDK — it handles endpoint, version, and auth automatically.
-  // .trim() guards against accidental whitespace copied into the Vercel env var.
-  const MODEL = 'gemini-1.5-flash';
-  console.log('Using Model:', MODEL);
+  // gemini-2.0-flash is the stable, generally-available model as of 2026.
+  // Explicitly passing apiVersion: 'v1' forces the SDK away from its default
+  // v1beta endpoint, which returns 404 for GA models.
+  const MODEL = 'gemini-2.0-flash';
+  console.log(`[analyze-pdf] Model: ${MODEL} | Key prefix: ${apiKey.slice(0, 4)}...`);
 
-  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY.trim());
+  const genAI = new GoogleGenerativeAI(apiKey, { apiVersion: 'v1' });
   const model = genAI.getGenerativeModel({
     model: MODEL,
     generationConfig: {
