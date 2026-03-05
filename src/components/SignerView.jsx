@@ -44,6 +44,16 @@ const getMarkerColor = (marker) => {
   return LEGACY[marker.subtype] || '#2563eb';
 };
 
+const useWindowWidth = () => {
+  const [width, setWidth] = useState(window.innerWidth);
+  useEffect(() => {
+    const handler = () => setWidth(window.innerWidth);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+  return width;
+};
+
 const SignerView = () => {
   const { documentId } = useParams();
   const [pdfUrl, setPdfUrl] = useState(null);
@@ -60,6 +70,7 @@ const SignerView = () => {
   });
   const setFieldValue = (key, value) =>
     setFieldValues((prev) => ({ ...prev, [key]: value }));
+  const windowWidth = useWindowWidth();
   const sigCanvas = useRef(null);
 
   // Clear the signature pad and reset the signed flag
@@ -226,7 +237,7 @@ const SignerView = () => {
                 <div key={`page_${pageNumber}`} className="pdf-page-wrapper">
                   <Page
                     pageNumber={pageNumber}
-                    width={Math.min(window.innerWidth - 40, 600)}
+                    width={Math.min(windowWidth - 40, 600)}
                     renderTextLayer={false}
                     renderAnnotationLayer={false}
                   />

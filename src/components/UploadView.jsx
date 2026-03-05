@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { storage, db } from '../firebase';
 import { ref, uploadBytes } from 'firebase/storage';
 import { doc, setDoc } from 'firebase/firestore';
@@ -37,6 +37,16 @@ const getMarkerColor = (marker) => {
   return LEGACY[marker.subtype] || '#2563eb';
 };
 
+const useWindowWidth = () => {
+  const [width, setWidth] = useState(window.innerWidth);
+  useEffect(() => {
+    const handler = () => setWidth(window.innerWidth);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+  return width;
+};
+
 const UploadView = () => {
   const [file, setFile] = useState(null);
   const [fileUrl, setFileUrl] = useState(null);
@@ -50,6 +60,8 @@ const UploadView = () => {
   const [isCopied, setIsCopied] = useState(false);
 
   // Drag-to-draw state
+  const windowWidth = useWindowWidth();
+
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawStart, setDrawStart] = useState(null);
   const [drawingBox, setDrawingBox] = useState(null);
@@ -305,7 +317,7 @@ const UploadView = () => {
                   >
                     <Page
                       pageNumber={pageNumber}
-                      width={Math.min(window.innerWidth - 80, 550)}
+                      width={Math.min(windowWidth - 80, 550)}
                       renderTextLayer={false}
                       renderAnnotationLayer={false}
                     />
