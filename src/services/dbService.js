@@ -108,10 +108,13 @@ export const fetchDocument = async (documentId) => {
   let markers = [];
 
   if (!markersSnap.empty) {
-    // Rebuild an ordered array from the sub-collection, sorted by index
+    // Current sub-collection schema: one Firestore doc per marker, sorted by index
     const raw = markersSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
     raw.sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
     markers = raw;
+  } else if (Array.isArray(data.fields) && data.fields.length > 0) {
+    // Current flat-array schema: written by UploadView as a `fields` array on the document
+    markers = data.fields;
   } else if (Array.isArray(data.markers) && data.markers.length > 0) {
     // Legacy schema: markers stored as an array field directly on the document
     markers = data.markers;

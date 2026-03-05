@@ -1,0 +1,25 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Documents collection — one record per uploaded PDF.
+    match /documents/{docId} {
+      // Allow any user (including unauthenticated signers) to read a document
+      // if they know its unique ID (i.e. they received the signing link).
+      allow read: if true;
+
+      // Only authenticated users (admins) may create or update documents.
+      allow write: if request.auth != null;
+
+      // Markers sub-collection — field positions belonging to a document.
+      match /markers/{markerId} {
+        // Signers need to read the field positions in order to render the form.
+        allow read: if true;
+
+        // Only authenticated users may write marker data.
+        allow write: if request.auth != null;
+      }
+    }
+  }
+}
