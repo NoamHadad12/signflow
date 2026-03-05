@@ -54,6 +54,7 @@ const UploadView = () => {
 
   const [file, setFile] = useState(null);
   const [fileUrl, setFileUrl] = useState(null);
+  const [fileError, setFileError] = useState(''); // Validation error shown below the file input
   const [numPages, setNumPages] = useState(null);
   // markers is an array of { type, subtype, page, nx, ny, nw, nh } — one entry per drawn box
   const [markers, setMarkers] = useState([]);
@@ -81,11 +82,13 @@ const UploadView = () => {
 
     // Reject files larger than 10 MB before doing anything else
     if (selectedFile && selectedFile.size > 10 * 1024 * 1024) {
-      alert('File is too large! Maximum allowed size is 10MB.');
+      setFileError('File is too large! Maximum allowed size is 10MB.');
       e.target.value = ''; // Clear the file input so the user can pick again
       return;
     }
 
+    // Clear any previous error when a valid file is selected
+    setFileError('');
     setFile(selectedFile);
     setGeneratedLink(''); // Reset link on new upload
     setIsCopied(false);   // Reset copied state on new upload
@@ -253,6 +256,22 @@ const UploadView = () => {
           className="file-input"
         />
       </div>
+
+      {/* Inline error shown when the selected file exceeds the size limit */}
+      {fileError && (
+        <p style={{
+          color: '#dc2626',
+          backgroundColor: '#fef2f2',
+          border: '1px solid #fca5a5',
+          borderRadius: '6px',
+          padding: '8px 12px',
+          marginTop: '10px',
+          fontSize: '0.9rem',
+          fontWeight: 500,
+        }}>
+          {fileError}
+        </p>
+      )}
 
       {/* Render PDF Preview to select signature location */}
       {fileUrl && !generatedLink && (
