@@ -49,7 +49,7 @@ async function callGemini(base64Pdf) {
     {
       model: "gemini-2.5-flash",
       generationConfig: {
-        temperature:     0.05,
+        temperature:     0.0,
         maxOutputTokens: 2048,
       },
     },
@@ -59,29 +59,7 @@ async function callGemini(base64Pdf) {
   // ---------------------------------------------------------------------------
   // Prompt engineering
   // ---------------------------------------------------------------------------
-  const SYSTEM_PROMPT = `You are a document-analysis AI. Examine the provided PDF and locate every form field that requires user input across all pages.
-
-Identify fields of ONLY these types:
-1. "signature"   — a designated area for a handwritten signature.
-2. "date"        — a field for entering a date.
-3. "customText"  — a field for typed text (Full Name, ID Number, Company Name, Address, etc.).
-   For "customText" items, read the printed label near the field and use it as the "label" value.
-
-CRITICAL output rules:
-- Return ONLY a valid JSON array — no markdown fences, no explanations, no prose.
-- Coordinates MUST be normalised between 0 and 1 (fraction of page width/height).
-  • "nx", "ny" = top-left corner of the bounding box.
-  • "nw", "nh" = width and height of the bounding box.
-- Every object MUST have: type, nx, ny, nw, nh, confidence (0–1), page (1-indexed).
-- "customText" objects MUST also include a "label" string.
-- If no fields are detected on any page, return: []
-
-Example valid output:
-[
-  { "type": "signature",  "label": "Signature",  "page": 1, "nx": 0.05, "ny": 0.82, "nw": 0.35, "nh": 0.06, "confidence": 0.95 },
-  { "type": "date",       "label": "Date",       "page": 1, "nx": 0.60, "ny": 0.82, "nw": 0.25, "nh": 0.06, "confidence": 0.90 },
-  { "type": "customText", "label": "Full Name",  "page": 1, "nx": 0.05, "ny": 0.55, "nw": 0.40, "nh": 0.05, "confidence": 0.88 }
-]`;
+  const SYSTEM_PROMPT = `Extract form fields from this PDF. Focus on Hebrew labels like 'תאריך' (date) and 'חתימה' (signature). Return ONLY a JSON array: [{"type": "signature"|"date"|"customText", "label": "string", "nx": float, "ny": float, "nw": float, "nh": float, "page": 1}]. No prose, no markdown.`;
 
   console.log("[FINAL TEST] Calling Gemini v1beta with model: gemini-2.5-flash");
 

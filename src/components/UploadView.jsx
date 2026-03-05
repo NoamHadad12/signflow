@@ -200,6 +200,7 @@ const UploadView = () => {
       }
 
       const { suggestions: raw } = await response.json();
+      console.log("Suggestions received:", raw);
 
       // Attach a unique ID to each suggestion so we can target it on approve/reject
       setSuggestions(raw.map((s) => ({ ...s, id: crypto.randomUUID() })));
