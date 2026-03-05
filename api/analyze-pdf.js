@@ -42,9 +42,8 @@ async function callGemini(base64Pdf) {
     throw new Error('GEMINI_API_KEY environment variable is not set on the server.');
   }
 
-  const MODEL   = 'gemini-1.5-flash';
-  const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`;
-
+  const MODEL   = 'gemini-1.5-flash'; 
+  const API_URL = `https://generativelanguage.googleapis.com/v1/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`;
   // ---------------------------------------------------------------------------
   // Prompt engineering:
   //   - Coordinates are normalised 0–1 (fraction of page width/height) so they
@@ -97,6 +96,9 @@ Example valid output:
       maxOutputTokens: 2048,
     },
   };
+
+  // Log the model being used so it is visible in Vercel Function Logs.
+  console.log('Using Model:', MODEL);
 
   const response = await fetch(API_URL, {
     method:  'POST',
