@@ -65,11 +65,9 @@ async function callGemini(base64Pdf) {
 
  // ---------------------------------------------------------------------------
   // Prompt engineering - Strict dictionary-matching with coordinate extraction.
-  // The model is instructed to behave as a text scanner, not a semantic reasoner.
-  // Both normal and visually reversed Hebrew strings are listed as targets,
-  // since Hebrew PDFs often encode characters in reverse visual order.
+  // Prioritize field inclusion over spatial precision.
   // ---------------------------------------------------------------------------
-  const SYSTEM_PROMPT = `You are a strict text-matching and coordinate extraction tool. Stop semantic reasoning. Scan the document exclusively for the following exact phrases (which include visually reversed Hebrew text due to PDF encoding):
+  const SYSTEM_PROMPT = `You are a strict text-matching tool. Scan the document exclusively for the following exact phrases (including visually reversed Hebrew text due to PDF encoding):
 
 SIGNATURE Targets: 'signature', 'חתימה', 'תמיתח', 'חתימת מלגאי/ת', 'ת/יאגלמ תמיתח', 'חתום כאן', 'נאכ םותח'.
 
@@ -77,10 +75,8 @@ DATE Targets: 'date', 'תאריך', 'ךיראת'.
 
 NAME Targets: 'name', 'שם', 'מש', 'שם מלא', 'אלמ םש'.
 
-When you find an exact match from these targets, look at the blank line or space immediately adjacent to it and calculate its ACTUAL fractional coordinates (0.0 to 1.0).
-Return ONLY a valid JSON array. Example of expected format: [{"type": "date", "label": "ךיראת", "nx": 0.25, "ny": 0.85, "nw": 0.2, "nh": 0.05, "page": 1}]`;
-
-  console.log("[analyze-pdf] Calling Gemini v1beta with model: gemini-2.5-flash");
+If you find ANY of these targets, you MUST include them in your output array. If you can calculate the relative coordinates (0.0 to 1.0), provide them. IF YOU CANNOT determine the exact coordinates, DO NOT omit the field! Instead, return fallback coordinates: "nx": 0.1, "ny": 0.1.
+Return ONLY a valid JSON array. Example: [{"type": "signature", "label": "תמיתח", "nx": 0.1, "ny": 0.1, "nw": 0.2, "nh": 0.05, "page": 1}]`;
 
   // Send the prompt text + PDF inline data. 
   // cleanBase64 has had any data-URI prefix stripped, so only raw base64 is sent.
@@ -95,6 +91,9 @@ Return ONLY a valid JSON array. Example of expected format: [{"type": "date", "l
   ]);
 
   const rawText = result.response.text() ?? '';
+
+  // Log the exact raw output from Gemini before JSON parsing attempts
+  console.log('[analyze-pdf] RAW GEMINI OUTPUT:', rawText);
 
   // Strip accidental markdown code fences before parsing
   const jsonString = rawText
@@ -115,18 +114,22 @@ Return ONLY a valid JSON array. Example of expected format: [{"type": "date", "l
     return [];
   }
 
-  // Use AI-provided coordinates when available; fall back to cascading defaults
-  // so fields are still visible even if the model omits coordinate properties.
-  return suggestions.map((s, i) => ({
-    type:       s.type || 'customText',
-    label:      s.label || s.type || 'Field',
-    page:       s.page  ?? 1,
-    nx:         s.nx ?? 0.05,
-    ny:         s.ny ?? (0.10 + (i * 0.08)),
-    nw:         s.nw ?? 0.20,
-    nh:         s.nh ?? 0.05,
-    confidence: 1.0,
-  }));
+  // Use AI-provided coordinates when available.
+  // If the AI returned the fallback (0.1, 0.1), cascade them visually so they don't stack.
+  return suggestions.map((s, i) => {
+    const isAiFallback = (s.nx === 0.1 && s.ny === 0.1);
+
+    return {
+      type:       s.type || 'customText',
+      label:      s.label || s.type || 'Field',
+      page:       s.page  ?? 1,
+      nx:         (s.nx != null && !isAiFallback) ? s.nx : 0.05,
+      ny:         (s.ny != null && !isAiFallback) ? s.ny : (0.10 + (i * 0.08)),
+      nw:         s.nw ?? 0.20,
+      nh:         s.nh ?? 0.05,
+      confidence: 1.0,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
