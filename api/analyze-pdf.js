@@ -64,20 +64,23 @@ async function callGemini(base64Pdf) {
   );
 
  // ---------------------------------------------------------------------------
-  // Prompt engineering - Strict dictionary-based detection for English and Hebrew.
-  // Hebrew PDFs often store characters in reverse visual order, so each Hebrew
-  // phrase is listed alongside its visually reversed form for full coverage.
+  // Prompt engineering - Strict dictionary-matching with coordinate extraction.
+  // The model is instructed to behave as a text scanner, not a semantic reasoner.
+  // Both normal and visually reversed Hebrew strings are listed as targets,
+  // since Hebrew PDFs often encode characters in reverse visual order.
   // ---------------------------------------------------------------------------
-  const SYSTEM_PROMPT = `Analyze this document to determine which form fields are required. You are strictly looking for matches from the following dictionaries (checking both English and Hebrew, including reversed Hebrew characters due to PDF encoding).
+  const SYSTEM_PROMPT = `You are a strict text-matching and coordinate extraction tool. Stop semantic reasoning. Scan the document exclusively for the following exact phrases (which include visually reversed Hebrew text due to PDF encoding):
 
-SIGNATURE Dictionary: 'signature', 'sign here', 'חתימה', 'חתימת לקוח', 'חתום כאן', 'תמיתח', 'חוקל תמיתח', 'נאכ םותח'.
-DATE Dictionary: 'date', 'תאריך', 'ךיראת'.
-NAME Dictionary: 'name', 'full name', 'שם', 'שם מלא', 'שם לקוח', 'מש', 'אלמ םש', 'חוקל םש'.
+SIGNATURE Targets: 'signature', 'חתימה', 'תמיתח', 'חתימת מלגאי/ת', 'ת/יאגלמ תמיתח', 'חתום כאן', 'נאכ םותח'.
 
-If you detect any of these strings, add the corresponding field type to your JSON array. Return ONLY a valid JSON array of objects. Do NOT calculate coordinates.
-Schema: [{"type": "signature" | "date" | "customText", "label": "Detected Field Name"}].`;
+DATE Targets: 'date', 'תאריך', 'ךיראת'.
 
-  console.log("[FINAL TEST] Calling Gemini v1beta with model: gemini-2.5-flash");
+NAME Targets: 'name', 'שם', 'מש', 'שם מלא', 'אלמ םש'.
+
+When you find an exact match from these targets, look at the blank line or space immediately adjacent to it and calculate its ACTUAL fractional coordinates (0.0 to 1.0).
+Return ONLY a valid JSON array. Schema: [{"type": "signature" | "date" | "customText", "label": "The exact word you matched", "nx": calculated_X, "ny": calculated_Y, "nw": 0.2, "nh": 0.05, "page": 1}].`;
+
+  console.log("[analyze-pdf] Calling Gemini v1beta with model: gemini-2.5-flash");
 
   // Send the prompt text + PDF inline data. 
   // cleanBase64 has had any data-URI prefix stripped, so only raw base64 is sent.
