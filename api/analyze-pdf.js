@@ -64,9 +64,20 @@ async function callGemini(base64Pdf) {
   );
 
  // ---------------------------------------------------------------------------
-  // Prompt engineering - Optimized for visually reversed Hebrew text
+  // Prompt engineering - Handles both English and visually reversed Hebrew text.
+  // Hebrew PDFs often store characters in reverse visual order, so the reversed
+  // forms below are what actually appears in the raw extracted text stream.
   // ---------------------------------------------------------------------------
-  const SYSTEM_PROMPT = `Analyze this document and determine what fields a user needs to fill out (e.g., signatures, dates, names). Return ONLY a valid JSON array of the required fields. Do NOT calculate coordinates. Schema: [{"type": "signature" | "date" | "customText", "label": "Detected Field Name"}].`;
+  const SYSTEM_PROMPT = `Analyze this document to identify required form fields (signatures, dates, names). The document may be in English or Hebrew.
+
+CRITICAL FOR HEBREW: The text is visually reversed.
+
+To find 'Date' (תאריך), look for the string 'ךיראת'.
+
+To find 'Signature' (חתימה), look for the string 'תמיתח' or 'המיתח'.
+
+Identify these fields regardless of whether the text is logical or reversed. Return ONLY a valid JSON array.
+Schema: [{"type": "signature" | "date" | "customText", "label": "Detected Field Name"}].`;
 
   console.log("[FINAL TEST] Calling Gemini v1beta with model: gemini-2.5-flash");
 
