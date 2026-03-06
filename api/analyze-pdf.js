@@ -78,7 +78,7 @@ DATE Targets: 'date', 'תאריך', 'ךיראת'.
 NAME Targets: 'name', 'שם', 'מש', 'שם מלא', 'אלמ םש'.
 
 When you find an exact match from these targets, look at the blank line or space immediately adjacent to it and calculate its ACTUAL fractional coordinates (0.0 to 1.0).
-Return ONLY a valid JSON array. Schema: [{"type": "signature" | "date" | "customText", "label": "The exact word you matched", "nx": calculated_X, "ny": calculated_Y, "nw": 0.2, "nh": 0.05, "page": 1}].`;
+Return ONLY a valid JSON array. Example of expected format: [{"type": "date", "label": "ךיראת", "nx": 0.25, "ny": 0.85, "nw": 0.2, "nh": 0.05, "page": 1}]`;
 
   console.log("[analyze-pdf] Calling Gemini v1beta with model: gemini-2.5-flash");
 
@@ -115,15 +115,16 @@ Return ONLY a valid JSON array. Schema: [{"type": "signature" | "date" | "custom
     return [];
   }
 
-  // Assign default cascading coordinates — the user will drag fields into position.
+  // Use AI-provided coordinates when available; fall back to cascading defaults
+  // so fields are still visible even if the model omits coordinate properties.
   return suggestions.map((s, i) => ({
     type:       s.type || 'customText',
     label:      s.label || s.type || 'Field',
     page:       s.page  ?? 1,
-    nx:         0.05,              // 5% from the left edge
-    ny:         0.10 + (i * 0.08), // Cascade downwards for each field
-    nw:         0.20,
-    nh:         0.05,
+    nx:         s.nx ?? 0.05,
+    ny:         s.ny ?? (0.10 + (i * 0.08)),
+    nw:         s.nw ?? 0.20,
+    nh:         s.nh ?? 0.05,
     confidence: 1.0,
   }));
 }
