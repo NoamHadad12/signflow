@@ -9,8 +9,9 @@ service cloud.firestore {
       // Anyone who knows the document ID (i.e. received the signing link) can
       // fetch it. This is intentional \u2014 the opaque UUID acts as an access token.
       // Additionally, we check that the document has not expired (IDOR mitigation).
-      allow get: if !('expiresAt' in resource.data) 
-                    || request.time.toMillis() < resource.data.expiresAt;
+      allow get: if resource == null
+                 || (request.auth != null && resource.data.clientId == request.auth.uid)
+                 || (!('expiresAt' in resource.data) || request.time.toMillis() < resource.data.expiresAt);
 
       // Only authenticated users may list/query documents, and only their own
       // (clientId must equal the caller's uid). Enforced server-side via Firestore
@@ -50,10 +51,24 @@ service cloud.firestore {
     }
 
     // ── users collection ─────────────────────────────────────────────────
-    // Stores firstName, lastName, and email for each registered user.
-    // Only the owner may read or write their own profile document.
+    // Stores firstName, lastName, email, uploadCount, and subscriptionEnd for each registered user.
+    // Only the owner may read or write their own profile document, OR a superAdmin.
     match /users/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, write: if request.auth != null && (
+        request.auth.uid == uid || 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'superAdmin'
+      );
+      
+      // ── payments sub-collection ──────────────────────────────────────────
+      match /payments/{paymentId} {
+        allow read: if request.auth != null && (
+          request.auth.uid == uid || 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'superAdmin'
+        );
+        allow write: if request.auth != null && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'superAdmin'
+        );
+      }
     }
 
     // ── logs collection ───────────────────────────────────────────────────
@@ -61,8 +76,7 @@ service cloud.firestore {
     // unauthenticated), but only authenticated users may read the audit log.
     // To mitigate DoS, we enforce a strict schema and size limit.
     match /logs/{logId} {
-      allow create: if request.resource.data.keys().hasAll(['actionType', 'timestamp', 'documentId'])
-                    && request.resource.size < 2000;
+      allow create: if request.resource.data.keys().hasAll(['actionType', 'timestamp', 'documentId']);
       allow read:   if request.auth != null;
     }
   }

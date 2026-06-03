@@ -12,6 +12,10 @@ export const NotificationProvider = ({ children }) => {
   const [toast, setToast] = useState(null);
   const [confirmConfig, setConfirmConfig] = useState(null);
 
+  const hideToast = useCallback(() => {
+    setToast(null);
+  }, []);
+
   const showToast = useCallback((message, type = 'info') => {
     setToast({ message, type });
     setTimeout(() => {
@@ -40,7 +44,7 @@ export const NotificationProvider = ({ children }) => {
       {children}
       
       {/* Global Toast */}
-      <Toast toast={toast} />
+      <Toast toast={toast} onClose={hideToast} />
 
       {/* Global Confirm Modal */}
       {confirmConfig && (

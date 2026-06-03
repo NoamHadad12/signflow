@@ -10,6 +10,7 @@
 // so the browser never makes direct requests to port 3001.
 import http from 'node:http';
 import handler from './api/analyze-pdf.js';
+import signHandler from './api/sign.js';
 
 const PORT = 3001;
 
@@ -54,10 +55,11 @@ const server = http.createServer(async (nodeReq, nodeRes) => {
     return;
   }
 
-  // Vite proxy strips /api prefix → this server receives /analyze-pdf
+  // Vite proxy strips /api prefix → this server receives /analyze-pdf or /sign
   const isAnalyze = nodeReq.url === '/analyze-pdf' || nodeReq.url === '/api/analyze-pdf';
+  const isSign = nodeReq.url === '/sign' || nodeReq.url === '/api/sign';
 
-  if (!isAnalyze || nodeReq.method !== 'POST') {
+  if ((!isAnalyze && !isSign) || nodeReq.method !== 'POST') {
     nodeRes.writeHead(404, { 'Content-Type': 'application/json' });
     nodeRes.end(JSON.stringify({ error: 'Not found' }));
     return;
@@ -81,7 +83,11 @@ const server = http.createServer(async (nodeReq, nodeRes) => {
   const res = buildVercelRes(nodeRes);
 
   try {
-    await handler(req, res);
+    if (isAnalyze) {
+      await handler(req, res);
+    } else if (isSign) {
+      await signHandler(req, res);
+    }
   } catch (err) {
     if (!nodeRes.writableEnded) {
       nodeRes.statusCode = 500;

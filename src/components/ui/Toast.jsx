@@ -1,8 +1,8 @@
 import React from 'react';
-import { CheckCircle2, XCircle, Info } from 'lucide-react';
+import { CheckCircle2, XCircle, Info, X } from 'lucide-react';
 
-/** Animated toast notification that slides in from the top-right */
-export default function Toast({ toast }) {
+/** Animated toast notification that slides in from the bottom-right */
+export default function Toast({ toast, onClose }) {
   if (!toast) return null;
   const isError = toast.type === 'error';
   const isInfo = toast.type === 'info';
@@ -21,14 +21,23 @@ export default function Toast({ toast }) {
   return (
     <div
       className={`
-        fixed top-5 right-5 z-[200] flex items-center gap-3 px-5 py-3.5
+        fixed bottom-5 right-5 z-[200] flex items-center gap-3 px-5 py-3.5
         rounded-xl shadow-2xl text-white text-sm font-medium
-        transform transition-all duration-300 animate-in slide-in-from-top-5 fade-in
+        transform transition-all duration-300 animate-in slide-in-from-bottom-5 fade-in
         ${bgColor}
       `}
     >
       <Icon size={18} className="shrink-0" />
-      {toast.message}
+      <span className="flex-1 mr-2">{toast.message}</span>
+      {onClose && (
+        <button 
+          onClick={onClose}
+          className="p-1 hover:bg-white/20 rounded-full transition-colors shrink-0"
+          aria-label="Close message"
+        >
+          <X size={16} />
+        </button>
+      )}
     </div>
   );
 }

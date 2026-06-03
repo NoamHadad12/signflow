@@ -5,7 +5,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
 } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 
 // Create the context object — components consume this via useAuth()
@@ -27,26 +27,47 @@ export const AuthProvider = ({ children }) => {
     // onAuthStateChanged fires immediately with the current user, then again
     // every time the user signs in or out. Returns an unsubscribe function.
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        // Show loader while fetching user data to prevent "Account Pending" flash
+        setLoading(true);
+      }
       setCurrentUser(user);
+      
+      let userUnsubscribe = null;
+
       if (user) {
         try {
-          const snap = await getDoc(doc(db, 'users', user.uid));
-          if (snap.exists()) {
-            const { firstName = '', lastName = '', status = 'pending', role = 'user' } = snap.data();
-            setUserProfile({ firstName, lastName, status, role });
-          } else {
-            setUserProfile({ firstName: '', lastName: '', status: 'pending', role: 'user' });
-          }
+          userUnsubscribe = onSnapshot(doc(db, 'users', user.uid), (snap) => {
+            if (snap.exists()) {
+              const data = snap.data();
+              setUserProfile({ 
+                firstName: data.firstName || '', 
+                lastName: data.lastName || '', 
+                status: data.status || 'pending', 
+                role: data.role || 'user',
+                uploadCount: data.uploadCount || 0,
+                isBlocked: data.isBlocked || false,
+                subscriptionEnd: data.subscriptionEnd || null
+              });
+            } else {
+              setUserProfile({ firstName: '', lastName: '', status: 'pending', role: 'user', uploadCount: 0, isBlocked: false, subscriptionEnd: null });
+            }
+          });
         } catch {
-          setUserProfile({ firstName: '', lastName: '', status: 'pending', role: 'user' });
+          setUserProfile({ firstName: '', lastName: '', status: 'pending', role: 'user', uploadCount: 0, isBlocked: false, subscriptionEnd: null });
         }
       } else {
-        setUserProfile({ firstName: '', lastName: '', status: 'pending', role: 'user' });
+        setUserProfile({ firstName: '', lastName: '', status: 'pending', role: 'user', uploadCount: 0, isBlocked: false, subscriptionEnd: null });
       }
       setLoading(false);
+
+      // Clean up the user profile listener when auth state changes or unmounts
+      return () => {
+        if (userUnsubscribe) userUnsubscribe();
+      };
     });
 
-    // Clean up the listener when the component unmounts
+    // Clean up the auth listener when the component unmounts
     return unsubscribe;
   }, []);
 
@@ -63,11 +84,34 @@ export const AuthProvider = ({ children }) => {
 
   const value = { currentUser, userProfile, login, signup, logout, loading };
 
-  // Render nothing until Firebase resolves the initial auth state.
+  // Render a loading spinner until Firebase resolves the initial auth state.
   // This prevents a flash of the login page when the user refreshes while logged in.
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {loading ? (
+        <div style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: '#f7f6f3',
+          fontFamily: "'DM Sans', sans-serif"
+        }}>
+          <style>{`
+            .auth-spinner {
+              width: 36px; height: 36px;
+              border: 3px solid #e5e5e0;
+              border-top-color: #9e7d52;
+              border-radius: 50%;
+              animation: auth-spin 0.8s linear infinite;
+            }
+            @keyframes auth-spin { to { transform: rotate(360deg); } }
+          `}</style>
+          <div className="auth-spinner" />
+        </div>
+      ) : (
+        children
+      )}
     </AuthContext.Provider>
   );
 };

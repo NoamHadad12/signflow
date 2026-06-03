@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { subscribeFilteredDocuments, deleteDocument, editDocumentName, subscribeUsers, updateUserStatus } from '../services/dbService';
+import { subscribeFilteredDocuments, deleteDocument, editDocumentName, subscribeUsers, updateUserStatus, fetchUserPayments, addPaymentRecord, toggleUserBlock } from '../services/dbService';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 
@@ -28,6 +28,13 @@ export function useAdminDashboard() {
   
   // Track deleting documents for loading spinner
   const [deletingIds, setDeletingIds] = useState(new Set());
+
+  // User Management Modal
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [paymentAmount, setPaymentAmount] = useState('59');
+  const [monthsToAdd, setMonthsToAdd] = useState(12);
+  const [paymentHistory, setPaymentHistory] = useState([]);
+  const [loadingPayments, setLoadingPayments] = useState(false);
 
   useEffect(() => {
     if (!currentUser?.uid) {
@@ -96,6 +103,58 @@ export function useAdminDashboard() {
       showToast('User revoked successfully!');
     } catch {
       showToast('Failed to revoke user', 'error');
+    }
+  };
+
+  const openUserModal = async (user) => {
+    setSelectedUser(user);
+    setPaymentHistory([]);
+    setLoadingPayments(true);
+    try {
+      const history = await fetchUserPayments(user.id);
+      setPaymentHistory(history);
+    } catch (err) {
+      showToast('Failed to fetch payments', 'error');
+    } finally {
+      setLoadingPayments(false);
+    }
+  };
+
+  const closeUserModal = () => setSelectedUser(null);
+
+  const handleAddPayment = async () => {
+    if (!selectedUser) return;
+    try {
+      await addPaymentRecord(selectedUser.id, Number(paymentAmount), Number(monthsToAdd), selectedUser.subscriptionEnd);
+      showToast('Payment recorded and subscription extended!');
+      const history = await fetchUserPayments(selectedUser.id);
+      setPaymentHistory(history);
+      
+      // Update selectedUser subscriptionEnd in local state to reflect UI changes without waiting for snapshot
+      const now = new Date();
+      let newEndDate;
+      if (selectedUser.subscriptionEnd && new Date(selectedUser.subscriptionEnd) > now) {
+        newEndDate = new Date(selectedUser.subscriptionEnd);
+      } else {
+        newEndDate = new Date();
+      }
+      newEndDate.setMonth(newEndDate.getMonth() + Number(monthsToAdd));
+      setSelectedUser({ ...selectedUser, subscriptionEnd: newEndDate.toISOString() });
+
+    } catch (err) {
+      showToast('Failed to add payment', 'error');
+    }
+  };
+
+  const handleToggleBlock = async () => {
+    if (!selectedUser) return;
+    const newStatus = !selectedUser.isBlocked;
+    try {
+      await toggleUserBlock(selectedUser.id, newStatus);
+      showToast(newStatus ? 'User blocked' : 'User unblocked');
+      setSelectedUser({ ...selectedUser, isBlocked: newStatus });
+    } catch (err) {
+      showToast('Failed to toggle block status', 'error');
     }
   };
 
@@ -211,6 +270,17 @@ export function useAdminDashboard() {
     handleCopyLink,
     handleDelete,
     openEditModal,
-    handleEditSubmit
+    handleEditSubmit,
+    selectedUser,
+    paymentAmount,
+    setPaymentAmount,
+    monthsToAdd,
+    setMonthsToAdd,
+    paymentHistory,
+    loadingPayments,
+    openUserModal,
+    closeUserModal,
+    handleAddPayment,
+    handleToggleBlock
   };
 }

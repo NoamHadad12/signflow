@@ -7,9 +7,13 @@ import Login from './components/Login';
 import SignUp from './components/SignUp';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminDashboard from './components/AdminDashboard';
+import Navbar from './components/Navbar';
 // AuthProvider must wrap the entire app so every component can read auth state
 import { AuthProvider } from './context/AuthContext';
 import { NotificationProvider } from './context/NotificationContext';
+import Footer from './components/Footer';
+import PrivacyPolicy from './components/PrivacyPolicy';
+import TermsAndConditions from './components/TermsAndConditions';
 
 function App() {
   return (
@@ -18,34 +22,41 @@ function App() {
       <AuthProvider>
         <NotificationProvider>
           <div className="app-container">
-            <Routes>
-              {/* Public route — anyone with the link can sign a document */}
-              <Route path="/sign/:documentId" element={<SignerView />} />
+            <Navbar />
+            <main style={{ flex: 1, display: 'flex', flexDirection: 'column', paddingBottom: '60px' }}>
+              <Routes>
+                {/* Public route — anyone with the link can sign a document */}
+                <Route path="/sign/:documentId" element={<SignerView />} />
 
-              {/* Public route — the login page */}
-              <Route path="/login" element={<Login />} />
-              <Route path="/signup" element={<SignUp />} />
+                {/* Public route — the login page */}
+                <Route path="/login" element={<Login />} />
+                <Route path="/signup" element={<SignUp />} />
 
-              {/* Protected route — only noam.hadad23@gmail.com can access the upload page */}
-              <Route
-                path="/"
-                element={
-                  <ProtectedRoute>
-                    <UploadView />
-                  </ProtectedRoute>
-                }
-              />
+                {/* Protected route — only noam.hadad23@gmail.com can access the upload page */}
+                <Route
+                  path="/"
+                  element={
+                    <ProtectedRoute>
+                      <UploadView />
+                    </ProtectedRoute>
+                  }
+                />
 
-              {/* Protected route — Admin Dashboard */}
-              <Route
-                path="/admin"
-                element={
-                  <ProtectedRoute>
-                    <AdminDashboard />
-                  </ProtectedRoute>
-                }
-              />
-            </Routes>
+                {/* Protected route — Dashboard */}
+                <Route
+                  path="/dashboard"
+                  element={
+                    <ProtectedRoute>
+                      <AdminDashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                {/* Legal Pages */}
+                <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+                <Route path="/terms-and-conditions" element={<TermsAndConditions />} />
+              </Routes>
+            </main>
+            <Footer />
           </div>
         </NotificationProvider>
       </AuthProvider>

@@ -4,7 +4,7 @@ import { storage, db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, increment } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
 import { useWindowWidth } from '../utils/pdfHelpers';
 import { detectFieldsWithGemini } from '../services/geminiFieldDetection';
@@ -61,6 +61,10 @@ export function useUploadView() {
 
   const [pendingBox, setPendingBox] = useState(null);
   const [pendingLabel, setPendingLabel] = useState('');
+
+  const isSubscribed = userProfile?.subscriptionEnd && new Date(userProfile.subscriptionEnd) > new Date();
+  const isSuperAdmin = userProfile?.role === 'superAdmin';
+  const hasReachedLimit = !isSuperAdmin && (userProfile?.isBlocked || (!isSubscribed && (userProfile?.uploadCount >= 3)));
 
   const resetUploadSelection = (selectedFile) => {
     setFile(selectedFile);
@@ -313,11 +317,21 @@ export function useUploadView() {
         ...(field.label ? { label: field.label } : {}),
       })),
     });
+
+    const userRef = doc(db, 'users', currentUser.uid);
+    await updateDoc(userRef, {
+      uploadCount: increment(1)
+    });
   };
 
   const handleUpload = async () => {
     if (!file) {
       showToast('Please select a document file first.', 'error');
+      return;
+    }
+
+    if (hasReachedLimit) {
+      showToast('You have reached the upload limit. Please upgrade to premium.', 'error');
       return;
     }
 
@@ -377,7 +391,7 @@ export function useUploadView() {
   };
 
   const shareOnWhatsApp = () => {
-    const message = `היי! מחכה לך מסמך לחתימה ב-SignFlow. לחץ על הקישור כדי לצפות ולחתום בקלות:\n\n${generatedLink}`;
+    const message = `Hey! A document is waiting for your signature on SignFlow. Click the link to view and sign easily:\n\n${generatedLink}`;
     const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
     window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
   };
@@ -433,5 +447,6 @@ export function useUploadView() {
     handleUpload,
     copyToClipboard,
     shareOnWhatsApp,
+    hasReachedLimit,
   };
 }

@@ -1,505 +1,920 @@
 import React from 'react';
 import {
-  Search,
-  Calendar,
-  SlidersHorizontal,
-  X,
-  Pencil,
-  Trash2,
-  FileText,
-  CheckCircle2,
-  Loader2,
-  Eye,
-  Link2,
-  AlertTriangle,
+  Search, Calendar, SlidersHorizontal, X, Pencil, Trash2,
+  FileText, CheckCircle2, Loader2, Eye, Link2, AlertTriangle,
 } from 'lucide-react';
 import StatusBadge from './ui/StatusBadge';
 import { useAdminDashboard } from '../hooks/useAdminDashboard';
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-/** Format an ISO date string to a readable label */
 const formatDate = (iso) => {
   if (!iso) return '—';
   return new Intl.DateTimeFormat('he-IL', {
     timeZone: 'Asia/Jerusalem',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
+    day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
   }).format(new Date(iso));
 };
 
-// ─── Main Component ──────────────────────────────────────────────────────────
-
 export default function AdminDashboard() {
   const {
-    activeTab,
-    setActiveTab,
-    users,
-    loadingUsers,
-    handleApproveUser,
-    handleRevokeUser,
-    userProfile,
-    logout,
-    documents,
-    loading,
-    startDate,
-    setStartDate,
-    endDate,
-    setEndDate,
-    isEditing,
-    setIsEditing,
-    newFileName,
-    setNewFileName,
-    copiedId,
-    deletingIds,
-    handleFilter,
-    clearFilters,
-    handleActionPreCheck,
-    handleCopyLink,
-    handleDelete,
-    openEditModal,
-    handleEditSubmit,
+    activeTab, setActiveTab,
+    users, loadingUsers,
+    handleApproveUser, handleRevokeUser,
+    userProfile, logout,
+    documents, loading,
+    startDate, setStartDate,
+    endDate, setEndDate,
+    isEditing, setIsEditing,
+    newFileName, setNewFileName,
+    copiedId, deletingIds,
+    handleFilter, clearFilters,
+    handleActionPreCheck, handleCopyLink, handleDelete,
+    openEditModal, handleEditSubmit,
+    selectedUser, paymentAmount, setPaymentAmount,
+    monthsToAdd, setMonthsToAdd,
+    paymentHistory, loadingPayments,
+    openUserModal, closeUserModal,
+    handleAddPayment, handleToggleBlock,
   } = useAdminDashboard();
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans overflow-x-hidden">
-      {/* Top Navigation Bar - sticky white header */}
-      <header className="flex items-center justify-end gap-4 p-4 absolute top-0 right-0 w-full z-30">
-        {userProfile?.firstName && (
-          <span className="text-gray-600 font-medium text-sm" dir="rtl">
-            {userProfile?.firstName ? `Hello ${userProfile.firstName}` : ''}
-          </span>
-        )}
-        <button
-          onClick={() => (window.location.href = '/')}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
-        >
-          Upload Document
-        </button>
-        <button
-          onClick={logout}
-          className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg transition-all text-sm"
-        >
-          Sign Out
-        </button>
-      </header>
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap');
 
-      {/* Page Content */}
-      <main className="w-full px-4 sm:px-6 lg:px-8 mx-auto bg-white rounded-2xl shadow-xl py-6 mt-16 mb-20 border border-slate-100">
+        *, *::before, *::after { box-sizing: border-box; }
 
-        {/* Page Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Admin Dashboard</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Manage your workspace.
-          </p>
-        </div>
+        .dash-root {
+          min-height: 100vh;
+          background: #f7f6f3;
+          font-family: 'DM Sans', sans-serif;
+          color: #1a1a1e;
+        }
 
-        {/* Dashboard Tabs */}
-        <div className="flex gap-4 mb-6 border-b border-gray-200">
-          <button
-            onClick={() => setActiveTab('documents')}
-            className={`pb-2 text-sm font-semibold transition-colors ${
-              activeTab === 'documents'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Documents
-          </button>
-          {userProfile?.role === 'superAdmin' && (
-            <button
-              onClick={() => setActiveTab('users')}
-              className={`pb-2 text-sm font-semibold transition-colors ${
-                activeTab === 'users'
-                  ? 'text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Users & Approvals
-            </button>
-          )}
-        </div>
+        /* ── Topbar ── */
+        .dash-topbar {
+          background: #ffffff;
+          border-bottom: 1px solid #ebebea;
+          padding: 0 1.5rem;
+          height: 60px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          position: sticky;
+          top: 0;
+          z-index: 100;
+        }
 
-        {activeTab === 'documents' && (
-          <>
-        {/* ── Filter Card ──────────────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6">
-          <div className="flex items-center justify-between gap-2 mb-5">
-            <div className="flex items-center gap-2">
-              <SlidersHorizontal size={17} className="text-blue-600" />
-              <h2 className="text-base font-semibold text-gray-800">Filters</h2>
-            </div>
+        .dash-logo {
+          font-family: 'DM Serif Display', serif;
+          font-size: 1.3rem;
+          color: #1a1a1e;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          text-decoration: none;
+        }
+        .dash-logo img { width: 24px; height: 24px; flex-shrink: 0; object-fit: contain; }
+        .dash-logo em { font-style: italic; color: #9e7d52; }
+
+        .dash-topbar-right { display: flex; align-items: center; gap: 0.75rem; }
+
+        .dash-greeting {
+          font-size: 0.84rem;
+          color: #9090a0;
+          font-weight: 300;
+          margin-right: 0.25rem;
+        }
+
+        .btn-primary {
+          background: #1a1a1e;
+          color: #f5f0e8;
+          border: none;
+          border-radius: 8px;
+          padding: 0.5rem 1rem;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 0.82rem;
+          font-weight: 500;
+          cursor: pointer;
+          transition: background 0.15s;
+        }
+        .btn-primary:hover { background: #2e2e34; }
+
+        .btn-ghost {
+          background: transparent;
+          color: #6b6b72;
+          border: 1px solid #e5e5e0;
+          border-radius: 8px;
+          padding: 0.5rem 1rem;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 0.82rem;
+          font-weight: 400;
+          cursor: pointer;
+          transition: background 0.15s, border-color 0.15s;
+        }
+        .btn-ghost:hover { background: #f7f6f3; border-color: #d0d0ca; }
+
+        /* ── Main layout ── */
+        .dash-main {
+          max-width: 1100px;
+          margin: 0 auto;
+          padding: 2rem 1.5rem 4rem;
+        }
+
+        .dash-header { margin-bottom: 1.8rem; }
+        .dash-title {
+          font-family: 'DM Serif Display', serif;
+          font-size: 2rem;
+          color: #1a1a1e;
+          margin-bottom: 0.2rem;
+          font-weight: 400;
+        }
+        .dash-subtitle { font-size: 0.88rem; color: #9090a0; font-weight: 300; }
+
+        /* ── Tabs ── */
+        .dash-tabs {
+          display: flex;
+          gap: 0;
+          border-bottom: 1px solid #ebebea;
+          margin-bottom: 1.8rem;
+        }
+        .dash-tab {
+          background: none;
+          border: none;
+          border-bottom: 2px solid transparent;
+          padding: 0.7rem 1.2rem;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 0.88rem;
+          font-weight: 400;
+          color: #9090a0;
+          cursor: pointer;
+          transition: color 0.15s, border-color 0.15s;
+          margin-bottom: -1px;
+        }
+        .dash-tab:hover { color: #1a1a1e; }
+        .dash-tab.active { color: #1a1a1e; border-bottom-color: #9e7d52; font-weight: 500; }
+
+        /* ── Filter card ── */
+        .filter-card {
+          background: #ffffff;
+          border: 1px solid #ebebea;
+          border-radius: 14px;
+          padding: 1.4rem 1.6rem;
+          margin-bottom: 1.2rem;
+        }
+        .filter-card-header {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          margin-bottom: 1.2rem;
+        }
+        .filter-card-title { font-size: 0.88rem; font-weight: 500; color: #1a1a1e; }
+
+        .filter-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.75rem;
+          align-items: flex-end;
+        }
+
+        .filter-field { display: flex; flex-direction: column; gap: 0.4rem; flex: 1; min-width: 160px; }
+
+        .filter-label {
+          font-size: 0.7rem;
+          font-weight: 500;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: #9090a0;
+        }
+
+        .filter-input-wrap { position: relative; }
+        .filter-input-icon {
+          position: absolute;
+          left: 0.65rem;
+          top: 50%;
+          transform: translateY(-50%);
+          color: #c0c0b8;
+          pointer-events: none;
+          display: flex;
+        }
+        .filter-input {
+          width: 100%;
+          border: 1px solid #e5e5e0;
+          border-radius: 8px;
+          padding: 0.55rem 0.75rem 0.55rem 2.1rem;
+          font-size: 0.88rem;
+          font-family: 'DM Sans', sans-serif;
+          color: #1a1a1e;
+          background: #fafaf8;
+          transition: border-color 0.15s, box-shadow 0.15s;
+          outline: none;
+        }
+        .filter-input:focus { border-color: #9e7d52; box-shadow: 0 0 0 3px rgba(158, 125, 82, 0.1); }
+
+        .filter-actions { display: flex; gap: 0.5rem; align-items: flex-end; }
+
+        .btn-search {
+          display: flex; align-items: center; gap: 0.4rem;
+          background: #1a1a1e; color: #f5f0e8;
+          border: none; border-radius: 8px;
+          padding: 0.58rem 1rem;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 0.84rem; font-weight: 500;
+          cursor: pointer; white-space: nowrap;
+          transition: background 0.15s;
+        }
+        .btn-search:hover { background: #2e2e34; }
+
+        .btn-clear {
+          display: flex; align-items: center; gap: 0.3rem;
+          background: transparent; color: #6b6b72;
+          border: 1px solid #e5e5e0; border-radius: 8px;
+          padding: 0.58rem 0.85rem;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 0.84rem; font-weight: 400;
+          cursor: pointer; white-space: nowrap;
+          transition: background 0.15s;
+        }
+        .btn-clear:hover { background: #f7f6f3; }
+
+        /* ── Table card ── */
+        .table-card {
+          background: #ffffff;
+          border: 1px solid #ebebea;
+          border-radius: 14px;
+          overflow: hidden;
+        }
+
+        .table-meta {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 1.1rem 1.6rem;
+          border-bottom: 1px solid #ebebea;
+        }
+        .table-meta-title {
+          font-size: 0.88rem;
+          font-weight: 500;
+          color: #1a1a1e;
+        }
+        .table-count {
+          font-size: 0.8rem;
+          color: #9090a0;
+          font-weight: 300;
+          margin-left: 0.4rem;
+        }
+
+        .table-scroll { overflow-x: auto; }
+
+        table { width: 100%; border-collapse: collapse; }
+
+        thead tr { background: #fafaf8; }
+        thead th {
+          padding: 0.75rem 1.1rem;
+          font-size: 0.72rem;
+          font-weight: 500;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: #9090a0;
+          text-align: left;
+          white-space: nowrap;
+          border-bottom: 1px solid #ebebea;
+        }
+        thead th.align-right { text-align: right; }
+
+        tbody tr {
+          border-bottom: 1px solid #f3f3f0;
+          transition: background 0.1s;
+        }
+        tbody tr:last-child { border-bottom: none; }
+        tbody tr:hover { background: #fafaf8; }
+        tbody tr.ghost-row { background: #fdf8f5; }
+        tbody tr.ghost-row:hover { background: #faf2ec; }
+
+        td {
+          padding: 0.9rem 1.1rem;
+          font-size: 0.88rem;
+          color: #1a1a1e;
+          vertical-align: middle;
+        }
+        td.muted { color: #9090a0; font-weight: 300; white-space: nowrap; }
+
+        /* File name cell */
+        .file-name-cell { display: flex; align-items: center; gap: 0.65rem; max-width: 320px; }
+        .file-icon-wrap {
+          width: 32px; height: 32px;
+          border-radius: 8px;
+          background: #f3f3f0;
+          display: flex; align-items: center; justify-content: center;
+          flex-shrink: 0;
+        }
+        .file-icon-wrap.ghost { background: #fff0ec; }
+        .file-name-link {
+          color: #1a1a1e;
+          text-decoration: none;
+          font-weight: 400;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .file-name-link:hover { color: #9e7d52; text-decoration: underline; }
+        .file-name-ghost { color: #c0674d; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* Action buttons */
+        .action-cell { text-align: right; }
+        .action-btns { display: flex; align-items: center; justify-content: flex-end; gap: 0.2rem; }
+
+        .icon-btn {
+          width: 32px; height: 32px;
+          border-radius: 7px;
+          border: none;
+          background: transparent;
+          display: flex; align-items: center; justify-content: center;
+          cursor: pointer;
+          color: #c0c0b8;
+          transition: background 0.15s, color 0.15s;
+        }
+        .icon-btn:hover { background: #f3f3f0; color: #1a1a1e; }
+        .icon-btn.green:hover { background: #edf7f0; color: #2d8a50; }
+        .icon-btn.amber:hover { background: #fef5ec; color: #9e7d52; }
+        .icon-btn.red:hover { background: #fdf0ee; color: #c0674d; }
+        .icon-btn.active-copy { background: #edf7f0; color: #2d8a50; }
+        .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* Empty / loading states */
+        .state-cell { padding: 3rem 1rem; text-align: center; }
+        .state-icon {
+          width: 48px; height: 48px;
+          border-radius: 12px;
+          background: #f3f3f0;
+          display: flex; align-items: center; justify-content: center;
+          margin: 0 auto 0.9rem;
+        }
+        .state-title { font-size: 0.9rem; font-weight: 500; color: #6b6b72; margin-bottom: 0.3rem; }
+        .state-sub { font-size: 0.82rem; color: #b0b0a8; font-weight: 300; }
+
+        /* Users tab badges */
+        .badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 0.2rem 0.7rem;
+          border-radius: 100px;
+          font-size: 0.75rem;
+          font-weight: 500;
+          white-space: nowrap;
+        }
+        .badge-approved { background: #edf7f0; color: #2d8a50; }
+        .badge-pending  { background: #fef5ec; color: #9e7d52; }
+
+        .user-meta { font-size: 0.78rem; color: #9090a0; font-weight: 300; margin-top: 0.2rem; }
+
+        .btn-approve {
+          background: #edf7f0; color: #2d8a50;
+          border: none; border-radius: 7px;
+          padding: 0.35rem 0.75rem;
+          font-size: 0.78rem; font-weight: 500;
+          font-family: 'DM Sans', sans-serif;
+          cursor: pointer; transition: background 0.15s;
+          white-space: nowrap;
+        }
+        .btn-approve:hover { background: #d8f0e0; }
+
+        .btn-revoke {
+          background: #fdf0ee; color: #c0674d;
+          border: none; border-radius: 7px;
+          padding: 0.35rem 0.75rem;
+          font-size: 0.78rem; font-weight: 500;
+          font-family: 'DM Sans', sans-serif;
+          cursor: pointer; transition: background 0.15s;
+          white-space: nowrap;
+        }
+        .btn-revoke:hover { background: #f9e0da; }
+
+        .btn-manage {
+          background: #1a1a1e; color: #f5f0e8;
+          border: none; border-radius: 7px;
+          padding: 0.35rem 0.75rem;
+          font-size: 0.78rem; font-weight: 500;
+          font-family: 'DM Sans', sans-serif;
+          cursor: pointer; transition: background 0.15s;
+          white-space: nowrap;
+          margin-right: 0.35rem;
+        }
+        .btn-manage:hover { background: #2e2e34; }
+
+        .user-action-cell { text-align: right; white-space: nowrap; }
+
+        /* ── Modals ── */
+        .modal-backdrop {
+          position: fixed; inset: 0; z-index: 200;
+          background: rgba(10, 10, 12, 0.55);
+          backdrop-filter: blur(4px);
+          display: flex; align-items: center; justify-content: center;
+          padding: 1.5rem;
+        }
+
+        .modal-card {
+          background: #ffffff;
+          border-radius: 18px;
+          padding: 2rem;
+          width: 100%;
+          max-width: 440px;
+          box-shadow: 0 24px 64px rgba(0,0,0,0.18);
+        }
+        .modal-card.wide { max-width: 520px; max-height: 88vh; overflow-y: auto; }
+
+        .modal-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 1.6rem;
+        }
+        .modal-title-group { display: flex; align-items: center; gap: 0.75rem; }
+        .modal-icon {
+          width: 38px; height: 38px;
+          border-radius: 10px;
+          background: #fef5ec;
+          display: flex; align-items: center; justify-content: center;
+        }
+        .modal-title {
+          font-family: 'DM Serif Display', serif;
+          font-size: 1.2rem;
+          color: #1a1a1e;
+          font-weight: 400;
+        }
+        .modal-close {
+          background: none; border: none; cursor: pointer;
+          color: #9090a0; padding: 0.2rem;
+          border-radius: 6px; transition: color 0.15s, background 0.15s;
+          display: flex;
+        }
+        .modal-close:hover { color: #1a1a1e; background: #f3f3f0; }
+
+        .modal-label {
+          font-size: 0.7rem;
+          font-weight: 500;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: #9090a0;
+          display: block;
+          margin-bottom: 0.5rem;
+        }
+
+        .modal-input {
+          width: 100%;
+          border: 1px solid #e5e5e0;
+          border-radius: 9px;
+          padding: 0.7rem 0.9rem;
+          font-size: 0.9rem;
+          font-family: 'DM Sans', sans-serif;
+          color: #1a1a1e;
+          background: #fafaf8;
+          outline: none;
+          transition: border-color 0.15s, box-shadow 0.15s;
+          margin-bottom: 1.6rem;
+        }
+        .modal-input:focus { border-color: #9e7d52; box-shadow: 0 0 0 3px rgba(158, 125, 82, 0.1); }
+
+        .modal-footer { display: flex; gap: 0.6rem; justify-content: flex-end; }
+
+        .btn-cancel {
+          background: transparent; color: #6b6b72;
+          border: 1px solid #e5e5e0; border-radius: 9px;
+          padding: 0.65rem 1.1rem;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 0.88rem; font-weight: 400;
+          cursor: pointer; transition: background 0.15s;
+        }
+        .btn-cancel:hover { background: #f7f6f3; }
+
+        .btn-save {
+          background: #1a1a1e; color: #f5f0e8;
+          border: none; border-radius: 9px;
+          padding: 0.65rem 1.3rem;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 0.88rem; font-weight: 500;
+          cursor: pointer; transition: background 0.15s;
+        }
+        .btn-save:hover { background: #2e2e34; }
+
+        /* User modal specifics */
+        .user-stat-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 0.75rem;
+          margin-bottom: 1.6rem;
+        }
+        .user-stat {
+          background: #fafaf8;
+          border: 1px solid #f0f0ea;
+          border-radius: 10px;
+          padding: 0.85rem 1rem;
+        }
+        .user-stat-label { font-size: 0.72rem; color: #9090a0; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 500; margin-bottom: 0.3rem; }
+        .user-stat-value { font-size: 1.1rem; font-weight: 500; color: #1a1a1e; }
+
+        .payment-section {
+          background: #fafaf8;
+          border: 1px solid #f0f0ea;
+          border-radius: 12px;
+          padding: 1.2rem;
+          margin-bottom: 1.4rem;
+        }
+        .payment-section-title { font-size: 0.84rem; font-weight: 500; color: #1a1a1e; margin-bottom: 1rem; }
+
+        .payment-row { display: flex; gap: 0.65rem; margin-bottom: 0.9rem; }
+        .payment-field { flex: 1; }
+        .payment-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.07em; color: #9090a0; font-weight: 500; margin-bottom: 0.4rem; display: block; }
+        .payment-input {
+          width: 100%;
+          border: 1px solid #e5e5e0;
+          border-radius: 8px;
+          padding: 0.55rem 0.8rem;
+          font-size: 0.88rem;
+          font-family: 'DM Sans', sans-serif;
+          color: #1a1a1e;
+          background: #ffffff;
+          outline: none;
+          transition: border-color 0.15s;
+        }
+        .payment-input:focus { border-color: #9e7d52; }
+
+        .btn-record {
+          width: 100%;
+          background: #1a1a1e; color: #f5f0e8;
+          border: none; border-radius: 9px;
+          padding: 0.65rem 1rem;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 0.88rem; font-weight: 500;
+          cursor: pointer; transition: background 0.15s;
+        }
+        .btn-record:hover { background: #2e2e34; }
+
+        .payment-history-title { font-size: 0.84rem; font-weight: 500; color: #1a1a1e; margin-bottom: 0.8rem; }
+        .payment-item {
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 0.75rem 0.9rem;
+          background: #fafaf8;
+          border: 1px solid #f0f0ea;
+          border-radius: 9px;
+          margin-bottom: 0.5rem;
+        }
+        .payment-amount { font-size: 0.9rem; font-weight: 500; color: #1a1a1e; }
+        .payment-date { font-size: 0.78rem; color: #9090a0; font-weight: 300; }
+        .months-badge {
+          font-size: 0.75rem; font-weight: 500;
+          background: #edf7f0; color: #2d8a50;
+          padding: 0.2rem 0.65rem; border-radius: 100px;
+        }
+
+        .access-row {
+          display: flex; align-items: center; justify-content: space-between;
+          padding-top: 1.2rem;
+          border-top: 1px solid #f0f0ea;
+          margin-top: 1.4rem;
+        }
+        .access-label { font-size: 0.88rem; font-weight: 500; color: #1a1a1e; }
+        .access-sub { font-size: 0.78rem; color: #9090a0; font-weight: 300; margin-top: 0.15rem; }
+
+        .btn-block {
+          background: #fdf0ee; color: #c0674d;
+          border: none; border-radius: 9px;
+          padding: 0.5rem 1rem;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 0.84rem; font-weight: 500;
+          cursor: pointer; transition: background 0.15s;
+        }
+        .btn-block:hover { background: #f9e0da; }
+
+        .btn-unblock {
+          background: #edf7f0; color: #2d8a50;
+          border: none; border-radius: 9px;
+          padding: 0.5rem 1rem;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 0.84rem; font-weight: 500;
+          cursor: pointer; transition: background 0.15s;
+        }
+        .btn-unblock:hover { background: #d8f0e0; }
+
+        .divider { border: none; border-top: 1px solid #f0f0ea; margin: 1.4rem 0; }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+          .dash-main { padding: 1.2rem 1rem 3rem; }
+          .dash-greeting { display: none; }
+          .filter-row { flex-direction: column; }
+          .filter-field { min-width: 100%; }
+          .filter-actions { width: 100%; }
+          .btn-search, .btn-clear { flex: 1; justify-content: center; }
+          .user-stat-grid { grid-template-columns: 1fr; }
+        }
+      `}</style>
+
+      <div className="dash-root">
+
+
+        {/* Main */}
+        <main className="dash-main">
+          <div className="dash-header">
+            <h1 className="dash-title">Dashboard</h1>
+            <p className="dash-subtitle">Manage documents and workspace access</p>
           </div>
 
-          <form onSubmit={handleFilter} className="flex flex-col sm:flex-row items-end gap-4">
-
-            {/* Start Date with calendar icon */}
-            <div className="flex flex-col gap-1 w-full sm:w-1/3">
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Start Date</label>
-              <div className="relative">
-                <Calendar size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm text-gray-800"
-                />
-              </div>
-            </div>
-
-            {/* End Date with calendar icon */}
-            <div className="flex flex-col gap-1 w-full sm:w-1/3">
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">End Date</label>
-              <div className="relative">
-                <Calendar size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm text-gray-800"
-                />
-              </div>
-            </div>
-
-            {/* Action buttons aligned to the bottom of the column */}
-            <div className="flex items-center gap-2 w-full sm:w-1/3">
-              <button
-                type="submit"
-                className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
-              >
-                <Search size={15} />
-                Search
-              </button>
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="flex items-center justify-center gap-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg transition-all text-sm"
-                title="Clear all filters"
-              >
-                <X size={15} />
-                Clear
-              </button>
-            </div>
-
-          </form>
-        </div>
-
-        {/* ── Table Card ───────────────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-
-          {/* Table meta bar */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-            <h3 className="text-sm font-semibold text-gray-700">
+          {/* Tabs */}
+          <div className="dash-tabs">
+            <button className={`dash-tab${activeTab === 'documents' ? ' active' : ''}`} onClick={() => setActiveTab('documents')}>
               Documents
-              {!loading && (
-                <span className="ml-2 text-xs font-normal text-gray-400">({documents.length} records)</span>
-              )}
-            </h3>
+            </button>
+            {userProfile?.role === 'superAdmin' && (
+              <button className={`dash-tab${activeTab === 'users' ? ' active' : ''}`} onClick={() => setActiveTab('users')}>
+                Users &amp; Approvals
+              </button>
+            )}
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-
-              {/* Sticky table header */}
-              <thead className="bg-slate-50">
-                <tr className="border-b border-slate-100">
-                  <th className="sticky top-0 p-4 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                    File Name
-                  </th>
-                  <th className="sticky top-0 p-4 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                    Status
-                  </th>
-                  <th className="sticky top-0 p-4 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                    Created At
-                  </th>
-                  <th className="sticky top-0 right-0 p-4 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right whitespace-nowrap bg-slate-50 shadow-[-4px_0_6px_-1px_rgba(0,0,0,0.05)] z-20">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody className="bg-white">
-
-                {/* Loading state */}
-                {loading && (
-                  <tr>
-                    <td colSpan="4" className="p-4 text-center border-b border-slate-100">
-                      <div className="flex flex-col items-center gap-3 text-gray-400">
-                        <Loader2 size={28} className="animate-spin text-blue-500" />
-                        <span className="text-sm">Loading documents…</span>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-
-                {/* Empty state */}
-                {!loading && documents.length === 0 && (
-                  <tr>
-                    <td colSpan="4" className="p-4 text-center border-b border-slate-100">
-                      <div className="flex flex-col items-center gap-3 text-gray-400">
-                        <div className="bg-gray-100 p-4 rounded-full">
-                          <FileText size={28} className="text-gray-400" />
-                        </div>
-                        <p className="text-sm font-medium text-gray-500">No documents found</p>
-                        <p className="text-xs text-gray-400">Try adjusting your filters or upload a new document.</p>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-
-                {/* Data rows */}
-                {!loading && documents.map((docObj) => (
-                  <tr
-                    key={docObj.id}
-                    className={`group transition-colors duration-100 border-b border-slate-100
-                      ${docObj._isGhost 
-                        ? 'bg-red-50/50 hover:bg-red-100/50' 
-                        : 'hover:bg-blue-50/50'}`}
-                  >
-                    {/* File Name with document icon */}
-                    <td className="p-4 max-w-[200px] sm:max-w-[300px] md:max-w-[400px] truncate overflow-hidden whitespace-nowrap">
-                      <div className="flex items-center gap-3">
-                        <div className={`p-1.5 rounded-md shrink-0 ${docObj._isGhost ? 'bg-red-100' : 'bg-blue-50'}`}>
-                          {docObj._isGhost 
-                            ? <AlertTriangle size={14} className="text-red-500" />
-                            : <FileText size={14} className="text-blue-500" />}
-                        </div>
-                        {docObj._isGhost ? (
-                          <span 
-                            className="text-sm font-medium text-red-600 truncate w-full cursor-default"
-                            title="Ghost record - missing files or corrupted"
-                          >
-                            {docObj.fileName || `[Corrupted: ${docObj.id.slice(0, 8)}...]`}
-                          </span>
-                        ) : docObj.signedPdfUrl ? (
-                          <a 
-                            href={docObj.signedPdfUrl} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            onClick={(e) => handleActionPreCheck(e, docObj.id)}
-                            className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline truncate w-full cursor-pointer"
-                            title={docObj.fileName}
-                          >
-                            {docObj.fileName}
-                          </a>
-                        ) : (
-                          <span 
-                            className="text-sm font-medium text-gray-800 truncate w-full cursor-default"
-                            title={docObj.fileName}
-                          >
-                            {docObj.fileName}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Lifecycle status badge */}
-                    <td className="p-4">
-                      {docObj._isGhost 
-                        ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-                            <AlertTriangle size={12} /> Ghost
-                          </span>
-                        : <StatusBadge status={docObj.status} />}
-                    </td>
-
-                    {/* Formatted date */}
-                    <td className="p-4 text-sm text-gray-500 whitespace-nowrap">
-                      {formatDate(docObj.createdAt)}
-                    </td>
-
-                    {/* Icon action buttons */}
-                    <td className="p-4 sticky right-0 bg-white group-hover:bg-[#f3f8fe] shadow-[-4px_0_6px_-1px_rgba(0,0,0,0.05)] z-10">
-                      <div className="flex items-center justify-end gap-1">
-
-                        {((docObj.status || '').toLowerCase() === 'signed' && docObj.signedPdfUrl) ? (
-                          <a
-                            href={docObj.signedPdfUrl}
-                            target="_blank"
-                            onClick={(e) => handleActionPreCheck(e, docObj.id)}
-                            rel="noopener noreferrer"
-                            title="View signed PDF"
-                            className="p-2 rounded-lg text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors duration-150 flex items-center justify-center"
-                          >
-                            <Eye size={16} />
-                          </a>
-                        ) : (
-                          <button
-                            onClick={() => handleCopyLink(docObj.id)}
-                            title="Copy signing link"
-                            className={`p-2 rounded-lg transition-colors duration-150 flex items-center justify-center
-                              ${copiedId === docObj.id
-                                ? 'text-emerald-600 bg-emerald-50'
-                                : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'}`}
-                          >
-                            {copiedId === docObj.id ? <CheckCircle2 size={16} /> : <Link2 size={16} />}
-                          </button>
-                        )}
-
-                        {/* Rename document */}
-                        <button
-                          onClick={() => openEditModal(docObj)}
-                          title="Rename document"
-                          className="p-2 rounded-lg text-gray-400 hover:text-amber-600 hover:bg-amber-50
-                                     transition-colors duration-150"
-                        >
-                          <Pencil size={16} />
-                        </button>
-
-                        {/* Permanently delete */}
-                        <button
-                          onClick={() => handleDelete(docObj)}
-                          title="Permanently delete document"
-                          disabled={deletingIds.has(docObj.id)}
-                          className={`p-2 rounded-lg transition-colors duration-150 
-                            ${deletingIds.has(docObj.id) 
-                              ? 'text-gray-300 cursor-not-allowed' 
-                              : 'text-gray-400 hover:text-red-600 hover:bg-red-50'}`}
-                        >
-                          {deletingIds.has(docObj.id) ? (
-                            <Loader2 size={16} className="animate-spin" />
-                          ) : (
-                            <Trash2 size={16} />
-                          )}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-
-              </tbody>
-            </table>
-          </div>
-        </div>
-        </>
-        )}
-
-        {activeTab === 'users' && userProfile?.role === 'superAdmin' && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-700">
-                Users & Approvals
-                {!loadingUsers && (
-                  <span className="ml-2 text-xs font-normal text-gray-400">({users.length} records)</span>
-                )}
-              </h3>
-            </div>
-            
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead className="bg-slate-50">
-                  <tr className="border-b border-slate-100">
-                    <th className="p-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
-                    <th className="p-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Email</th>
-                    <th className="p-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="p-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Role</th>
-                    <th className="p-4 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white">
-                  {loadingUsers ? (
-                    <tr>
-                      <td colSpan="5" className="p-4 text-center">Loading...</td>
-                    </tr>
-                  ) : users.length === 0 ? (
-                    <tr>
-                      <td colSpan="5" className="p-4 text-center text-gray-500">No users found.</td>
-                    </tr>
-                  ) : users.map(u => (
-                    <tr key={u.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                      <td className="p-4 text-sm font-medium text-gray-800">{u.firstName} {u.lastName}</td>
-                      <td className="p-4 text-sm text-gray-600">{u.email}</td>
-                      <td className="p-4 text-sm">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                          u.status?.toLowerCase() === 'approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
-                        }`}>
-                          {u.status?.toLowerCase() === 'approved' ? 'Approved' : 'Pending'}
-                        </span>
-                      </td>
-                      <td className="p-4 text-sm text-gray-600">{u.role}</td>
-                      <td className="p-4 text-right">
-                        {u.status?.toLowerCase() === 'pending' && (
-                          <button
-                            onClick={() => handleApproveUser(u.id)}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-1.5 px-3 rounded-lg text-xs transition-colors"
-                          >
-                            Approve
-                          </button>
-                        )}
-                        {u.status?.toLowerCase() === 'approved' && u.role !== 'superAdmin' && (
-                          <button
-                            onClick={() => handleRevokeUser(u.id)}
-                            className="bg-red-600 hover:bg-red-700 text-white font-semibold py-1.5 px-3 rounded-lg text-xs transition-colors ml-2"
-                          >
-                            Revoke
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </main>
-
-      {/* ── Edit / Rename Modal ─────────────────────────────────────────── */}
-      {isEditing && (
-        <div
-          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setIsEditing(false)}
-        >
-          {/* Prevent click-through to the backdrop inside the card */}
-          <div
-            className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center gap-3 mb-5">
-              <div className="bg-amber-100 p-2 rounded-lg">
-                <Pencil size={18} className="text-amber-600" />
+          {/* ── Documents Tab ── */}
+          {activeTab === 'documents' && (
+            <>
+              {/* Filter */}
+              <div className="filter-card">
+                <div className="filter-card-header">
+                  <SlidersHorizontal size={15} color="#9e7d52" />
+                  <span className="filter-card-title">Filter by date</span>
+                </div>
+                <form onSubmit={handleFilter} className="filter-row">
+                  <div className="filter-field">
+                    <label className="filter-label">Start Date</label>
+                    <div className="filter-input-wrap">
+                      <span className="filter-input-icon"><Calendar size={14} /></span>
+                      <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="filter-input" />
+                    </div>
+                  </div>
+                  <div className="filter-field">
+                    <label className="filter-label">End Date</label>
+                    <div className="filter-input-wrap">
+                      <span className="filter-input-icon"><Calendar size={14} /></span>
+                      <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="filter-input" />
+                    </div>
+                  </div>
+                  <div className="filter-actions">
+                    <button type="submit" className="btn-search"><Search size={14} />Search</button>
+                    <button type="button" onClick={clearFilters} className="btn-clear"><X size={14} />Clear</button>
+                  </div>
+                </form>
               </div>
-              <h2 className="text-lg font-bold text-gray-900">Rename Document</h2>
-            </div>
 
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-              New File Name
-            </label>
+              {/* Table */}
+              <div className="table-card">
+                <div className="table-meta">
+                  <span className="table-meta-title">
+                    Documents
+                    {!loading && <span className="table-count">({documents.length} records)</span>}
+                  </span>
+                </div>
+                <div className="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>File Name</th>
+                        <th>Status</th>
+                        <th>Created At</th>
+                        <th className="align-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {loading && (
+                        <tr>
+                          <td colSpan="4" className="state-cell">
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
+                              <Loader2 size={24} color="#9e7d52" className="animate-spin" style={{ animation: 'spin 0.8s linear infinite' }} />
+                              <span style={{ fontSize: '0.88rem', color: '#9090a0' }}>Loading documents…</span>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      {!loading && documents.length === 0 && (
+                        <tr>
+                          <td colSpan="4" className="state-cell">
+                            <div className="state-icon"><FileText size={22} color="#c0c0b8" /></div>
+                            <p className="state-title">No documents found</p>
+                            <p className="state-sub">Try adjusting your filters or upload a new document.</p>
+                          </td>
+                        </tr>
+                      )}
+                      {!loading && documents.map((docObj) => (
+                        <tr key={docObj.id} className={docObj._isGhost ? 'ghost-row' : ''}>
+                          <td>
+                            <div className="file-name-cell">
+                              <div className={`file-icon-wrap${docObj._isGhost ? ' ghost' : ''}`}>
+                                {docObj._isGhost
+                                  ? <AlertTriangle size={15} color="#c0674d" />
+                                  : <FileText size={15} color="#9e7d52" />}
+                              </div>
+                              {docObj._isGhost ? (
+                                <span className="file-name-ghost" title="Ghost record — missing files or corrupted">
+                                  {docObj.fileName || `[Corrupted: ${docObj.id.slice(0, 8)}…]`}
+                                </span>
+                              ) : docObj.signedPdfUrl ? (
+                                <a href={docObj.signedPdfUrl} target="_blank" rel="noopener noreferrer"
+                                   onClick={(e) => handleActionPreCheck(e, docObj.id)}
+                                   className="file-name-link" title={docObj.fileName}>
+                                  {docObj.fileName}
+                                </a>
+                              ) : (
+                                <span className="file-name-link" title={docObj.fileName}>{docObj.fileName}</span>
+                              )}
+                            </div>
+                          </td>
+                          <td>
+                            {docObj._isGhost
+                              ? <span className="badge" style={{ background: '#fdf0ee', color: '#c0674d' }}><AlertTriangle size={11} style={{ marginRight: 4 }} />Ghost</span>
+                              : <StatusBadge status={docObj.status} />}
+                          </td>
+                          <td className="muted">{formatDate(docObj.createdAt)}</td>
+                          <td className="action-cell">
+                            <div className="action-btns">
+                              {((docObj.status || '').toLowerCase() === 'signed' && docObj.signedPdfUrl) ? (
+                                <a href={docObj.signedPdfUrl} target="_blank" rel="noopener noreferrer"
+                                   onClick={(e) => handleActionPreCheck(e, docObj.id)}
+                                   className="icon-btn green" title="View signed PDF" style={{ textDecoration: 'none' }}>
+                                  <Eye size={15} />
+                                </a>
+                              ) : (
+                                <button onClick={() => handleCopyLink(docObj.id)} title="Copy signing link"
+                                        className={`icon-btn${copiedId === docObj.id ? ' active-copy' : ' green'}`}>
+                                  {copiedId === docObj.id ? <CheckCircle2 size={15} /> : <Link2 size={15} />}
+                                </button>
+                              )}
+                              <button onClick={() => openEditModal(docObj)} title="Rename document" className="icon-btn amber">
+                                <Pencil size={15} />
+                              </button>
+                              <button onClick={() => handleDelete(docObj)} title="Delete document"
+                                      disabled={deletingIds.has(docObj.id)} className="icon-btn red">
+                                {deletingIds.has(docObj.id) ? <Loader2 size={15} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Trash2 size={15} />}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ── Users Tab ── */}
+          {activeTab === 'users' && userProfile?.role === 'superAdmin' && (
+            <div className="table-card">
+              <div className="table-meta">
+                <span className="table-meta-title">
+                  Users &amp; Approvals
+                  {!loadingUsers && <span className="table-count">({users.length} records)</span>}
+                </span>
+              </div>
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>Status</th>
+                      <th>Details</th>
+                      <th className="align-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loadingUsers ? (
+                      <tr><td colSpan="5" className="state-cell" style={{ color: '#9090a0', fontSize: '0.88rem' }}>Loading…</td></tr>
+                    ) : users.length === 0 ? (
+                      <tr><td colSpan="5" className="state-cell"><p className="state-title">No users found</p></td></tr>
+                    ) : users.map(u => (
+                      <tr key={u.id}>
+                        <td style={{ fontWeight: 500 }}>{u.firstName} {u.lastName}</td>
+                        <td className="muted">{u.email}</td>
+                        <td>
+                          <span className={`badge ${u.status?.toLowerCase() === 'approved' ? 'badge-approved' : 'badge-pending'}`}>
+                            {u.status?.toLowerCase() === 'approved' ? 'Approved' : 'Pending'}
+                          </span>
+                        </td>
+                        <td>
+                          <span style={{ fontSize: '0.82rem', color: '#1a1a1e' }}>{u.role}</span>
+                          <div className="user-meta">Uploads: {u.uploadCount || 0}</div>
+                          <div className="user-meta">Sub ends: {formatDate(u.subscriptionEnd)}</div>
+                        </td>
+                        <td className="user-action-cell">
+                          <button onClick={() => openUserModal(u)} className="btn-manage">Manage Access</button>
+                          {u.status?.toLowerCase() === 'pending' && (
+                            <button onClick={() => handleApproveUser(u.id)} className="btn-approve">Approve</button>
+                          )}
+                          {u.status?.toLowerCase() === 'approved' && u.role !== 'superAdmin' && (
+                            <button onClick={() => handleRevokeUser(u.id)} className="btn-revoke">Revoke</button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* ── Rename Modal ── */}
+      {isEditing && (
+        <div className="modal-backdrop" onClick={() => setIsEditing(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title-group">
+                <div className="modal-icon"><Pencil size={17} color="#9e7d52" /></div>
+                <h2 className="modal-title">Rename Document</h2>
+              </div>
+            </div>
+            <label className="modal-label">New file name</label>
             <input
               type="text"
               value={newFileName}
               onChange={(e) => setNewFileName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleEditSubmit()}
               autoFocus
-              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm text-gray-800
-                         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-6 transition"
               placeholder="document-name.pdf"
+              className="modal-input"
             />
+            <div className="modal-footer">
+              <button onClick={() => setIsEditing(false)} className="btn-cancel">Cancel</button>
+              <button onClick={handleEditSubmit} className="btn-save">Save Changes</button>
+            </div>
+          </div>
+        </div>
+      )}
 
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setIsEditing(false)}
-                className="px-4 py-2.5 text-sm font-medium text-gray-600 border border-gray-300
-                           rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleEditSubmit}
-                className="px-5 py-2.5 text-sm font-semibold bg-blue-600 hover:bg-blue-700
-                           text-white rounded-lg shadow-sm transition-colors"
-              >
-                Save Changes
+      {/* ── Manage User Modal ── */}
+      {selectedUser && (
+        <div className="modal-backdrop" onClick={closeUserModal}>
+          <div className="modal-card wide" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Manage: {selectedUser.firstName} {selectedUser.lastName}</h2>
+              <button className="modal-close" onClick={closeUserModal}><X size={18} /></button>
+            </div>
+
+            <div className="user-stat-grid">
+              <div className="user-stat">
+                <div className="user-stat-label">Uploads</div>
+                <div className="user-stat-value">{selectedUser.uploadCount || 0}</div>
+              </div>
+              <div className="user-stat">
+                <div className="user-stat-label">Subscription ends</div>
+                <div style={{ fontSize: '0.88rem', fontWeight: 500, color: '#1a1a1e', marginTop: 4 }}>{formatDate(selectedUser.subscriptionEnd)}</div>
+              </div>
+            </div>
+
+            <div className="payment-section">
+              <div className="payment-section-title">Add Payment &amp; Extend</div>
+              <div className="payment-row">
+                <div className="payment-field">
+                  <label className="payment-label">Amount (₪)</label>
+                  <input type="number" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} className="payment-input" />
+                </div>
+                <div className="payment-field">
+                  <label className="payment-label">Months to add</label>
+                  <input type="number" value={monthsToAdd} onChange={(e) => setMonthsToAdd(e.target.value)} className="payment-input" />
+                </div>
+              </div>
+              <button onClick={handleAddPayment} className="btn-record">Record Payment</button>
+            </div>
+
+            <div>
+              <div className="payment-history-title">Payment History</div>
+              {loadingPayments ? (
+                <p style={{ fontSize: '0.84rem', color: '#9090a0' }}>Loading…</p>
+              ) : paymentHistory.length === 0 ? (
+                <p style={{ fontSize: '0.84rem', color: '#9090a0', fontWeight: 300, fontStyle: 'italic' }}>No payments recorded.</p>
+              ) : paymentHistory.map(p => (
+                <div key={p.id} className="payment-item">
+                  <div>
+                    <div className="payment-amount">₪{p.amount}</div>
+                    <div className="payment-date">{formatDate(p.createdAt)}</div>
+                  </div>
+                  <span className="months-badge">+{p.monthsAdded} months</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="access-row">
+              <div>
+                <div className="access-label">Site Access</div>
+                <div className="access-sub">{selectedUser.isBlocked ? 'User is manually blocked.' : 'User has normal access.'}</div>
+              </div>
+              <button onClick={handleToggleBlock} className={selectedUser.isBlocked ? 'btn-unblock' : 'btn-block'}>
+                {selectedUser.isBlocked ? 'Unblock Access' : 'Block Access'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-    </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </>
   );
 }

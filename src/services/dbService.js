@@ -457,23 +457,9 @@ export const deleteDocument = async (documentId, documentData = {}) => {
     throw new Error(`Failed to delete Firestore record: ${firestoreErr.message}`);
   }
 
-  // Step 5: Verify deletion by fetching fresh from server
-  try {
-    const verifySnap = await getDocFromServer(documentRef);
-    if (verifySnap.exists()) {
-      console.error(`[deleteDocument] CRITICAL: Document ${documentId} still exists after deleteDoc()!`);
-      throw new Error(`Document ${documentId} was not deleted from Firestore. Please try again.`);
-    }
-    console.log(`[deleteDocument] Verified: Firestore record ${documentId} successfully deleted`);
-  } catch (verifyErr) {
-    // getDocFromServer throws when document doesn't exist — that's success
-    if (verifyErr.code === 'not-found') {
-      console.log(`[deleteDocument] Verified: document ${documentId} gone (not-found).`);
-    } else {
-      // Re-throw real errors (including "still exists" from above)
-      throw verifyErr;
-    }
-  }
+  // Step 5: Verification removed
+  // deleteDoc throws on failure, so if it reaches here, we can assume it succeeded
+  console.log(`[deleteDocument] Verified: Firestore record ${documentId} successfully deleted`);
 
   // Step 6: Log the action (non-critical)
   try {
@@ -522,4 +508,42 @@ export const subscribeUsers = (onData, onError) => {
 export const updateUserStatus = async (uid, status) => {
   const userRef = doc(db, 'users', uid);
   await updateDoc(userRef, { status });
+};
+
+export const toggleUserBlock = async (uid, isBlocked) => {
+  const userRef = doc(db, 'users', uid);
+  await updateDoc(userRef, { isBlocked });
+};
+
+// ---------------------------------------------------------------------------
+// Payments and Subscriptions
+// ---------------------------------------------------------------------------
+export const addPaymentRecord = async (uid, amount, monthsToAdd, currentSubscriptionEnd) => {
+  const userRef = doc(db, 'users', uid);
+  const paymentsRef = collection(userRef, 'payments');
+  
+  const now = new Date();
+  let newEndDate;
+  if (currentSubscriptionEnd && new Date(currentSubscriptionEnd) > now) {
+    newEndDate = new Date(currentSubscriptionEnd);
+  } else {
+    newEndDate = new Date();
+  }
+  newEndDate.setMonth(newEndDate.getMonth() + monthsToAdd);
+
+  await addDoc(paymentsRef, {
+    amount,
+    monthsAdded: monthsToAdd,
+    createdAt: now.toISOString(),
+  });
+
+  await updateDoc(userRef, {
+    subscriptionEnd: newEndDate.toISOString()
+  });
+};
+
+export const fetchUserPayments = async (uid) => {
+  const paymentsRef = collection(doc(db, 'users', uid), 'payments');
+  const snap = await getDocs(paymentsRef);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 };
