@@ -854,20 +854,20 @@ body {
   gap: 12px;
   width: 100%;
   padding: 12px 20px;
-  background: #fff;
+  background: #ffffff;
   color: #3c4043;
   border: 1.5px solid #dadce0;
   border-radius: 6px;
   font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s, box-shadow 0.2s;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
   font-family: var(--font-family);
 }
 
 .btn-google:hover:not(:disabled) {
   background: #f8f9fa;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
   transform: none;
 }
 
