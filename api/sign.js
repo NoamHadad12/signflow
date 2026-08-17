@@ -1,9 +1,5 @@
 import { PDFDocument, rgb } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
-import { cert, getApps, initializeApp, applicationDefault } from 'firebase-admin/app';
-import { FieldValue, getFirestore } from 'firebase-admin/firestore';
-import { getAuth } from 'firebase-admin/auth';
-import { getStorage } from 'firebase-admin/storage';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -16,6 +12,24 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const DOCUMENT_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_FIELD_LENGTH = 500;
+let adminModulesPromise;
+
+function loadAdminModules() {
+  if (!adminModulesPromise) {
+    adminModulesPromise = Promise.all([
+      import('firebase-admin/app'),
+      import('firebase-admin/firestore'),
+      import('firebase-admin/auth'),
+      import('firebase-admin/storage'),
+    ]).then(([appModule, firestoreModule, authModule, storageModule]) => ({
+      ...appModule,
+      ...firestoreModule,
+      ...authModule,
+      ...storageModule,
+    }));
+  }
+  return adminModulesPromise;
+}
 
 function loadServiceAccount() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
@@ -30,7 +44,8 @@ function loadServiceAccount() {
   }
 }
 
-function getAdminApp() {
+async function getAdminApp() {
+  const { getApps, initializeApp, cert, applicationDefault } = await loadAdminModules();
   if (getApps().length > 0) return getApps()[0];
   const account = loadServiceAccount();
   return initializeApp({
@@ -75,7 +90,8 @@ async function requirePhoneVerification(req, signerPhone) {
     error.statusCode = 401;
     throw error;
   }
-  const decoded = await getAuth(getAdminApp()).verifyIdToken(token);
+  const { getAuth } = await loadAdminModules();
+  const decoded = await getAuth(await getAdminApp()).verifyIdToken(token);
   if (!decoded.phone_number || normalizePhone(decoded.phone_number) !== normalizePhone(signerPhone)) {
     const error = new Error('The verified phone number does not match this document.');
     error.statusCode = 403;
@@ -124,6 +140,7 @@ async function reserveDocument(db, documentId) {
 
 async function releaseReservation(documentRef) {
   try {
+    const { FieldValue } = await loadAdminModules();
     const snapshot = await documentRef.get();
     if (snapshot.exists && snapshot.data().status === 'signing') {
       await documentRef.update({ status: 'pending', signingStartedAt: FieldValue.delete() });
@@ -144,7 +161,8 @@ export default async function handler(req, res) {
 
   let documentRef;
   try {
-    const app = getAdminApp();
+    const { getFirestore, getStorage, FieldValue } = await loadAdminModules();
+    const app = await getAdminApp();
     const db = getFirestore(app);
     // Authenticate protected signers before acquiring the signing reservation,
     // so an unauthenticated caller cannot repeatedly flip the document state.

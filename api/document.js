@@ -1,11 +1,25 @@
-import { cert, getApps, initializeApp, applicationDefault } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
-import { getAuth } from 'firebase-admin/auth';
-import { getStorage } from 'firebase-admin/storage';
-
 const DOCUMENT_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+let adminModulesPromise;
 
-function getAdminApp() {
+function loadAdminModules() {
+  if (!adminModulesPromise) {
+    adminModulesPromise = Promise.all([
+      import('firebase-admin/app'),
+      import('firebase-admin/firestore'),
+      import('firebase-admin/auth'),
+      import('firebase-admin/storage'),
+    ]).then(([appModule, firestoreModule, authModule, storageModule]) => ({
+      ...appModule,
+      ...firestoreModule,
+      ...authModule,
+      ...storageModule,
+    }));
+  }
+  return adminModulesPromise;
+}
+
+async function getAdminApp() {
+  const { getApps, initializeApp, applicationDefault, cert } = await loadAdminModules();
   if (getApps().length > 0) return getApps()[0];
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
   let credential = applicationDefault();
@@ -35,7 +49,8 @@ async function verifyPhoneToken(req, expectedPhone) {
     error.statusCode = 401;
     throw error;
   }
-  const decoded = await getAuth(getAdminApp()).verifyIdToken(token);
+  const { getAuth } = await loadAdminModules();
+  const decoded = await getAuth(await getAdminApp()).verifyIdToken(token);
   if (!decoded.phone_number || normalizePhone(decoded.phone_number) !== normalizePhone(expectedPhone)) {
     const error = new Error('The verified phone number does not match this document.');
     error.statusCode = 403;
@@ -49,7 +64,8 @@ export default async function handler(req, res) {
   if (!DOCUMENT_ID_RE.test(documentId)) return res.status(400).json({ error: 'A valid documentId is required.' });
 
   try {
-    const app = getAdminApp();
+    const { getFirestore, getStorage } = await loadAdminModules();
+    const app = await getAdminApp();
     const snapshot = await getFirestore(app).collection('documents').doc(documentId).get();
     if (!snapshot.exists) return res.status(404).json({ error: 'Document not found.' });
     const data = snapshot.data();
