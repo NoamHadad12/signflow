@@ -758,8 +758,7 @@ body {
     font-size: 0.82rem;
     padding: 5px 8px;
   }
-
-  .form-sig-wrap {
+.form-sig-wrap {
     height: 68px;
   }
 
@@ -785,6 +784,11 @@ body {
   right: 16px;
   padding: 6px 16px;
   font-size: 0.82rem;
+  /* Test modification: bright background & glow effect */
+  background-color: #ef4444 !important;
+  color: #ffffff !important;
+  border-radius: 8px;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.6);
 }
 
 /* ── Login Page ─────────────────────────────────────────────── */
@@ -864,4 +868,3 @@ body {
   height: 20px;
   flex-shrink: 0;
 }
-
