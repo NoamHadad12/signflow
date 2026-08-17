@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { storage, db, auth } from '../firebase';
-import { ref, getDownloadURL, deleteObject } from 'firebase/storage';
-import { doc, updateDoc } from 'firebase/firestore';
+import { auth } from '../firebase';
 import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
 import { Document, Page, pdfjs } from 'react-pdf';
 import SignaturePad from 'react-signature-canvas';
@@ -38,12 +36,6 @@ const PEN_SIZE_OPTIONS = [
   { key: 'bold', label: 'Bold', lineWidth: 3.8, minWidth: 2.2, maxWidth: 4.2 },
 ];
 
-const storageCompat = {
-  refFromURL: (url) => ({
-    delete: () => deleteObject(ref(storage, url)),
-  }),
-};
-
 const SignerView = () => {
   const { documentId } = useParams();
   const { showToast } = useNotification();
@@ -57,10 +49,10 @@ const SignerView = () => {
   const [isExpired, setIsExpired] = useState(false);
   const [missingFile, setMissingFile] = useState(false);
   const [signedPdfUrl, setSignedPdfUrl] = useState('');
-  const [originalPdfUrl, setOriginalPdfUrl] = useState('');
   const [isSigned, setIsSigned] = useState(false);
   const [uploadedSignature, setUploadedSignature] = useState(null);
   const [selectedPenSize, setSelectedPenSize] = useState('medium');
+  const [metadataLoaded, setMetadataLoaded] = useState(false);
 
   const selectedPenConfig =
     PEN_SIZE_OPTIONS.find((option) => option.key === selectedPenSize) || PEN_SIZE_OPTIONS[1];
@@ -155,9 +147,6 @@ const SignerView = () => {
   };
 
   useEffect(() => {
-    // Track the object URL so the cleanup function can revoke it without a stale closure
-    let objectUrl = null;
-
     const loadDocument = async () => {
       if (!documentId) return;
 
@@ -177,7 +166,6 @@ const SignerView = () => {
           }
 
           setMarkers(result.markers);
-          setOriginalPdfUrl(result.data?.originalPdfUrl || result.data?.fileUrl || '');
 
           if (result.data?.penThickness && PEN_SIZE_OPTIONS.some(o => o.key === result.data.penThickness)) {
             setSelectedPenSize(result.data.penThickness);
@@ -189,44 +177,62 @@ const SignerView = () => {
             setSignerPhone(phone);
             setIs2FARequired(true);
           }
-        }
-
-        // Fetch the PDF as a blob to avoid CORS issues with react-pdf
-        const fileRef = ref(storage, `pdfs/${documentId}.pdf`);
-        let url = await getDownloadURL(fileRef);
-
-        // Ensure the URL retrieves binary media content
-        if (!url.includes('alt=media')) {
-          url += (url.includes('?') ? '&' : '?') + 'alt=media';
-        }
-
-        const response = await fetch(url);
-        if (!response.ok) throw new Error('Failed to fetch the PDF file content.');
-
-        const blob = await response.blob();
-        objectUrl = URL.createObjectURL(blob);
-        setPdfUrl(objectUrl);
-
-      } catch (error) {
-        console.error('Error fetching document:', error);
-        if (error?.code === 'storage/object-not-found') {
+          setMetadataLoaded(true);
+        } else {
           setMissingFile(true);
-        } else if (error?.code === 'permission-denied' || error?.message?.toLowerCase().includes('permission')) {
+        }
+      } catch (error) {
+        console.error('Error fetching document metadata:', error);
+        if (error?.code === 'permission-denied' || error?.message?.toLowerCase().includes('permission')) {
           // Block access if Firestore rules rejected the read (e.g. document link expired)
           setIsExpired(true);
+        } else {
+          setMissingFile(true);
         }
       }
     };
 
     loadDocument();
+  }, [documentId]);
 
-    // Revoke the object URL on unmount using the local variable, not the stale state value
-    return () => {
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
+  // The PDF itself is served by the backend. For protected documents this
+  // effect cannot run until Firebase Phone Auth has produced a verified token.
+  useEffect(() => {
+    if (!documentId || !metadataLoaded || (is2FARequired && twoFAState !== 'verified')) return undefined;
+    let objectUrl = null;
+    let cancelled = false;
+
+    const loadPdf = async () => {
+      try {
+        const idToken = is2FARequired && auth.currentUser
+          ? await auth.currentUser.getIdToken()
+          : '';
+        const response = await fetch(`/api/document?documentId=${encodeURIComponent(documentId)}`, {
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+          cache: 'no-store',
+        });
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          const error = new Error(payload.error || 'Failed to fetch the PDF.');
+          error.status = response.status;
+          throw error;
+        }
+        const blob = await response.blob();
+        objectUrl = URL.createObjectURL(blob);
+        if (!cancelled) setPdfUrl(objectUrl);
+      } catch (error) {
+        console.error('Error fetching PDF:', error);
+        if (error.status === 409 || error.status === 410) setIsExpired(true);
+        else setMissingFile(true);
       }
     };
-  }, [documentId]);
+
+    loadPdf();
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [documentId, metadataLoaded, is2FARequired, twoFAState]);
 
   const onDocumentLoadSuccess = ({ numPages }) => {
     setNumPages(numPages);
@@ -398,8 +404,6 @@ const SignerView = () => {
     }
     setIsSubmitting(true);
     try {
-      const cleanupTargetUrl = originalPdfUrl.trim();
-
       // Build a per-marker-index formValues map that the API expects.
       // Uses getInputKey (same as the input cards) so values are always aligned.
       const formValues = {};
@@ -435,7 +439,7 @@ const SignerView = () => {
         }
       }
 
-      await continueSubmission(signatureData, formValues, cleanupTargetUrl);
+      await continueSubmission(signatureData, formValues);
     } catch (error) {
       console.error('Error submitting document:', error);
       showToast(error.message, 'error');
@@ -444,40 +448,28 @@ const SignerView = () => {
     }
   };
 
-  const continueSubmission = async (signatureData, formValues, cleanupTargetUrl) => {
+  const continueSubmission = async (signatureData, formValues) => {
     try {
+      const idToken = is2FARequired && auth.currentUser
+        ? await auth.currentUser.getIdToken()
+        : '';
       const response = await fetch('/api/sign', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documentId, signatureData, markers, formValues }),
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        // The server loads marker positions from Firestore. They are deliberately
+        // not accepted from the browser because request bodies can be modified.
+        body: JSON.stringify({ documentId, signatureData, formValues }),
       });
 
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Failed to sign the document.');
 
-      const documentRef = doc(db, 'documents', documentId);
-      await updateDoc(documentRef, {
-        status: 'signed',
-        signedAt: new Date().toISOString(),
-        signedPdfUrl: result.downloadUrl,
-      });
-
-      let cleanupPromise = Promise.resolve();
-      if (cleanupTargetUrl && cleanupTargetUrl !== result.downloadUrl) {
-        cleanupPromise = storageCompat
-          .refFromURL(cleanupTargetUrl)
-          .delete()
-          .catch((cleanupError) => {
-            console.warn('Original PDF cleanup failed after a successful signing flow:', cleanupError);
-          });
-      } else if (cleanupTargetUrl && cleanupTargetUrl === result.downloadUrl) {
-        console.warn('Skipped original PDF cleanup because the original URL matches the signed URL.');
-      }
-
       setSignedPdfUrl(result.downloadUrl);
       setIsCompleted(true);
       showToast("Document signed successfully!", "success");
-      await cleanupPromise;
     } catch (error) {
       console.error('Error during the signing process:', error);
       showToast(`An error occurred: ${error.message}`, "error");

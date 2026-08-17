@@ -9,7 +9,9 @@
 // Vite's built-in proxy (see vite.config.js) routes /api/* → localhost:3001/*,
 // so the browser never makes direct requests to port 3001.
 import http from 'node:http';
-import handler from './api/analyze-pdf.js';
+import analyzePdfHandler from './api/analyze-pdf.js';
+import signHandler from './api/sign.js';
+import documentHandler from './api/document.js';
 
 const PORT = 3001;
 
@@ -45,8 +47,8 @@ function buildVercelRes(nodeRes) {
 const server = http.createServer(async (nodeReq, nodeRes) => {
   // Allow cross-origin requests from Vite's dev server
   nodeRes.setHeader('Access-Control-Allow-Origin', '*');
-  nodeRes.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  nodeRes.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  nodeRes.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  nodeRes.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (nodeReq.method === 'OPTIONS') {
     nodeRes.writeHead(204);
@@ -55,9 +57,18 @@ const server = http.createServer(async (nodeReq, nodeRes) => {
   }
 
   // Vite proxy strips /api prefix → this server receives /analyze-pdf
-  const isAnalyze = nodeReq.url === '/analyze-pdf' || nodeReq.url === '/api/analyze-pdf';
+  const pathname = new URL(nodeReq.url, `http://${nodeReq.headers.host || 'localhost'}`).pathname;
+  const handlers = {
+    '/analyze-pdf': analyzePdfHandler,
+    '/api/analyze-pdf': analyzePdfHandler,
+    '/sign': signHandler,
+    '/api/sign': signHandler,
+    '/document': documentHandler,
+    '/api/document': documentHandler,
+  };
+  const handler = handlers[pathname];
 
-  if (!isAnalyze || nodeReq.method !== 'POST') {
+  if (!handler) {
     nodeRes.writeHead(404, { 'Content-Type': 'application/json' });
     nodeRes.end(JSON.stringify({ error: 'Not found' }));
     return;
@@ -77,7 +88,13 @@ const server = http.createServer(async (nodeReq, nodeRes) => {
   }
 
   // Build Vercel-compatible req / res objects
-  const req = { method: nodeReq.method, body: parsedBody };
+  const requestUrl = new URL(nodeReq.url, `http://${nodeReq.headers.host || 'localhost'}`);
+  const req = {
+    method: nodeReq.method,
+    body: parsedBody,
+    headers: nodeReq.headers,
+    query: Object.fromEntries(requestUrl.searchParams.entries()),
+  };
   const res = buildVercelRes(nodeRes);
 
   try {
@@ -94,5 +111,7 @@ const server = http.createServer(async (nodeReq, nodeRes) => {
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`[dev-api] Local API server running at http://localhost:${PORT}`);
   console.log('[dev-api] Handling: POST /analyze-pdf (routed from Vite proxy /api/analyze-pdf)');
+  console.log('[dev-api] Handling: POST /sign (routed from Vite proxy /api/sign)');
+  console.log('[dev-api] Handling: GET /document (routed from Vite proxy /api/document)');
   console.log('[dev-api] Env source: .env.local (loaded via --env-file flag in package.json)');
 });

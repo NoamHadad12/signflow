@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { storage, db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes } from 'firebase/storage';
 import { doc, setDoc } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
 import { useWindowWidth } from '../utils/pdfHelpers';
@@ -238,8 +238,8 @@ export function useUploadView() {
       const msg = error.message || '';
       if (error.status === 429 || msg.includes('429') || /quota/i.test(msg)) {
         showToast('Daily Limit Reached. The AI has reached its free-tier limit. Please wait about 60 seconds and try again.', 'error');
-      } else if (msg.includes('VITE_GEMINI_API_KEY')) {
-        showToast('Gemini is not configured yet. Add VITE_GEMINI_API_KEY and try again.', 'error');
+      } else if (msg.includes('GEMINI_API_KEY')) {
+        showToast('Gemini is not configured yet. Add GEMINI_API_KEY and try again.', 'error');
       } else {
         showToast('Oops! We hit a small snag while trying to read your document. Please give it another try.', 'error');
       }
@@ -285,7 +285,7 @@ export function useUploadView() {
     setPendingLabel('');
   };
 
-  const saveDocumentToFirestore = async (fileId, fileName, fileUrl, confirmedFields) => {
+  const saveDocumentToFirestore = async (fileId, fileName, confirmedFields) => {
     const documentRef = doc(db, 'documents', fileId);
 
     // Only save phone number if SMS auth is enabled
@@ -293,8 +293,6 @@ export function useUploadView() {
 
     await setDoc(documentRef, {
       fileName,
-      fileUrl,
-      originalPdfUrl: fileUrl,
       fileRef: `pdfs/${fileId}.pdf`,
       clientId:  currentUser.uid,
       status: 'pending',
@@ -347,9 +345,10 @@ export function useUploadView() {
       const fileId = uuidv4();
       const storageRef = ref(storage, `pdfs/${fileId}.pdf`);
       await uploadBytes(storageRef, file);
-      const fileUrl = await getDownloadURL(storageRef);
 
-      await saveDocumentToFirestore(fileId, file.name, fileUrl, confirmedFields);
+      // Store only the canonical Storage path. Download-token URLs are bearer
+      // credentials and should not be copied into a publicly readable record.
+      await saveDocumentToFirestore(fileId, file.name, confirmedFields);
 
       const link = `${window.location.origin}/sign/${fileId}`;
       setGeneratedLink(link);

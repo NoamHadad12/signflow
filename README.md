@@ -52,24 +52,29 @@ Before you begin, ensure you have the following installed:
    VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
    VITE_FIREBASE_APP_ID=your_app_id
 
-   # Gemini AI Configuration
-   VITE_GEMINI_API_KEY=your_gemini_api_key
+   # Server-only configuration (do not prefix secrets with VITE_)
+   GEMINI_API_KEY=your_gemini_api_key
+   FIREBASE_STORAGE_BUCKET=your_project_id.appspot.com
+
+   # Firebase Admin service-account JSON. On Vercel, store the JSON as a
+   # base64 string to avoid multiline private-key formatting issues.
+   FIREBASE_SERVICE_ACCOUNT=base64_encoded_service_account_json
    ```
 
 ## 💻 Running Locally
 
 To run the application with both the Vite frontend and the Vercel Serverless backend functions, use the following command:
 
+Run the frontend and API adapter in two terminals:
+
 ```bash
 npm run dev
+npm run dev:api
 ```
 
-> **Note:** We use `vercel dev` as the main development command in `package.json`. This ensures that the `/api` routes are correctly served alongside the frontend, avoiding `ECONNREFUSED` or `502 Bad Gateway` errors during local development. By default, `vercel dev` will detect the Vite project and start both the frontend (usually on port 5173 or similar) and the serverless functions (usually on port 3000).
-
-If you are running this for the first time, you might need to link your project to Vercel:
-```bash
-vercel link
-```
+Vite runs at `http://localhost:5175` and proxies `/api/*` to the local adapter
+at `http://localhost:3001`. For local Firebase Admin authentication, either set
+`FIREBASE_SERVICE_ACCOUNT` or configure `GOOGLE_APPLICATION_CREDENTIALS`.
 
 ## 🏗 Project Structure
 

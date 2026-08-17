@@ -6,6 +6,9 @@
   "functions": {
     "api/analyze-pdf.js": {
       "maxDuration": 60
+    },
+    "api/sign.js": {
+      "maxDuration": 60
     }
   },
   "rewrites": [

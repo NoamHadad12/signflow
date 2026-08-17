@@ -79,7 +79,7 @@ export function useAdminDashboard() {
       }
     );
     return () => unsubscribe();
-  }, [userProfile?.role]);
+  }, [userProfile?.role, showToast]);
 
   const handleApproveUser = async (uid) => {
     try {

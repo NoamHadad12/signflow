@@ -83,10 +83,12 @@ const normalizeSuggestion = (entry) => {
 };
 
 async function callGemini({ imageBase64, mimeType, pageNumber, pageText }) {
-  const apiKey = (process.env.VITE_GEMINI_API_KEY || '').trim();
+  // GEMINI_API_KEY is server-only. The VITE_ fallback keeps existing deployments
+  // working while they migrate away from a client-exposed naming convention.
+  const apiKey = (process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '').trim();
 
   if (!apiKey || apiKey.startsWith('${')) {
-    throw new Error('VITE_GEMINI_API_KEY is not configured.');
+    throw new Error('GEMINI_API_KEY is not configured.');
   }
 
   const cleanBase64 = String(imageBase64 || '').replace(/^data:[^;]+;base64,/, '').trim();

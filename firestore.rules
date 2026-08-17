@@ -2,68 +2,83 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
 
-    // ── documents collection ──────────────────────────────────────────────
+    // Bootstrap access is tied to the Firebase-authenticated email. Existing
+    // admins can additionally be represented by a locked user profile role.
+    function isSuperAdmin() {
+      return signedIn()
+        && (
+          request.auth.token.email == 'noam.hadad23@gmail.com'
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'superAdmin'
+        );
+    }
+
+    function ownsDocument(docId) {
+      return signedIn()
+        && get(/databases/$(database)/documents/documents/$(docId)).data.clientId == request.auth.uid;
+    }
+
     match /documents/{docId} {
+      // The opaque UUID is the capability used by the public signing route.
+      // Expiration is enforced here and is independently rechecked by /api/sign.
+      allow get: if !('expiresAt' in resource.data)
+                 || request.time.toMillis() < resource.data.expiresAt;
 
-      // Anyone who knows the document ID (i.e. received the signing link) can
-      // fetch it. This is intentional \u2014 the opaque UUID acts as an access token.
-      // Additionally, we check that the document has not expired (IDOR mitigation).
-      allow get: if !('expiresAt' in resource.data) 
-                    || request.time.toMillis() < resource.data.expiresAt;
+      allow list: if signedIn() && request.auth.uid == resource.data.clientId;
 
-      // Only authenticated users may list/query documents, and only their own
-      // (clientId must equal the caller's uid). Enforced server-side via Firestore
-      // rules so no client-side bypass is possible.
-      allow list: if request.auth != null
-                  && request.auth.uid == resource.data.clientId;
+      allow create: if signedIn()
+                    && request.resource.data.clientId == request.auth.uid
+                    && request.resource.data.status == 'pending';
 
-      // Authenticated users may create a document only if they set clientId to
-      // their own uid. Prevents one user from creating documents on behalf of another.
-      allow create: if request.auth != null
-                    && request.resource.data.clientId == request.auth.uid;
+      // Signing lifecycle and file-result fields are server-owned. Document
+      // owners may only rename records after creation; Firebase Admin performs
+      // validated lifecycle updates and bypasses client rules.
+      allow update: if ownsDocument(docId)
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                      .hasOnly(['fileName']);
+      allow delete: if ownsDocument(docId);
 
-      // Two categories of update are allowed:
-      //   1. The document owner (clientId == uid) can update any field.
-      //   2. An unauthenticated signer can update ONLY the status lifecycle fields
-      //      (status, signedPdfUrl, signedAt). No other field may be touched.
-      allow update: if
-        (request.auth != null && resource.data.clientId == request.auth.uid)
-        ||
-        request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['status', 'signedPdfUrl', 'signedAt']);
-
-      // Only the document owner may permanently delete a document.
-      allow delete: if request.auth != null
-                    && resource.data.clientId == request.auth.uid;
-
-      // ── markers sub-collection ──────────────────────────────────────────
       match /markers/{markerId} {
-        // Signers (unauthenticated) need to read markers to render the signing form.
-        allow read: if true;
-
-        // Only the document owner may write/modify marker positions.
-        allow write: if request.auth != null
-                     && get(/databases/$(database)/documents/documents/$(docId)).data.clientId
-                        == request.auth.uid;
+        allow read: if !('expiresAt' in get(/databases/$(database)/documents/documents/$(docId)).data)
+                    || request.time.toMillis()
+                       < get(/databases/$(database)/documents/documents/$(docId)).data.expiresAt;
+        allow write: if ownsDocument(docId);
       }
     }
 
-    // ── users collection ─────────────────────────────────────────────────
-    // Stores firstName, lastName, and email for each registered user.
-    // Only the owner may read or write their own profile document.
     match /users/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow get: if signedIn() && (request.auth.uid == uid || isSuperAdmin());
+      allow list: if isSuperAdmin();
+
+      allow create: if signedIn()
+                    && request.auth.uid == uid
+                    && request.resource.data.status == 'pending'
+                    && (
+                      (request.auth.token.email == 'noam.hadad23@gmail.com'
+                        && request.resource.data.role == 'superAdmin')
+                      ||
+                      (request.auth.token.email != 'noam.hadad23@gmail.com'
+                        && request.resource.data.role == 'user')
+                    );
+
+      // A regular user cannot approve themselves or promote their own role.
+      allow update: if isSuperAdmin()
+                    || (signedIn()
+                        && request.auth.uid == uid
+                        && request.resource.data.diff(resource.data).affectedKeys()
+                          .hasOnly(['firstName', 'lastName']));
+      allow delete: if isSuperAdmin();
     }
 
-    // ── logs collection ───────────────────────────────────────────────────
-    // Append-only audit trail. Any client may write a log entry (signers are
-    // unauthenticated), but only authenticated users may read the audit log.
-    // To mitigate DoS, we enforce a strict schema and size limit.
     match /logs/{logId} {
-      allow create: if request.resource.data.keys().hasAll(['actionType', 'timestamp', 'documentId'])
+      allow create: if signedIn()
+                    && request.resource.data.keys()
+                      .hasAll(['actionType', 'timestamp', 'documentId'])
                     && request.resource.size < 2000;
-      allow read:   if request.auth != null;
+      allow read: if signedIn();
     }
   }
 }
