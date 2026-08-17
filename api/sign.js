@@ -228,7 +228,13 @@ export default async function handler(req, res) {
     await bucket.file(signedPath).save(Buffer.from(await pdfDoc.save()), {
       resumable: false,
       contentType: 'application/pdf',
-      metadata: { metadata: { firebaseStorageDownloadTokens: downloadToken } },
+      metadata: {
+        metadata: {
+          firebaseStorageDownloadTokens: downloadToken,
+          ownerUid: documentData.clientId,
+          documentId,
+        },
+      },
     });
     const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(signedPath)}?alt=media&token=${downloadToken}`;
     const signedAt = new Date().toISOString();

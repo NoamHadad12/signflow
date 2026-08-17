@@ -2,33 +2,24 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    function ownsDocument(documentId) {
-      return request.auth != null
-             && firestore.get(/databases/(default)/documents/documents/$(documentId)).data.clientId == request.auth.uid;
-    }
+    match /pdfs/{fileName} {
+      // Original PDFs are served to public signers by /api/document. Direct
+      // client access is restricted to the user recorded in object metadata.
+      allow read: if request.auth != null
+                  && resource.metadata.ownerUid == request.auth.uid;
 
-    match /pdfs/{documentId}.pdf {
-      allow delete: if ownsDocument(documentId);
-    }
+      // New originals are uploaded by the authenticated owner. Requiring the
+      // UID in custom metadata gives later read/delete rules a trusted owner.
+      allow create: if request.auth != null
+                    && request.resource.contentType == 'application/pdf'
+                    && request.resource.size < 10 * 1024 * 1024
+                    && request.resource.metadata.ownerUid == request.auth.uid;
 
-    match /pdfs/signed_{documentId}.pdf {
-      allow delete: if ownsDocument(documentId);
-    }
+      // Signed files and lifecycle changes are written by Firebase Admin only.
+      allow update: if false;
 
-    // Match all files in the 'pdfs' folder
-    match /pdfs/{allPaths=**} {
-      // Public signers receive originals through /api/document, which validates
-      // expiry and optional SMS authentication. Direct anonymous Storage reads
-      // would bypass that control, so only authenticated clients may read here.
-      allow read: if request.auth != null;
-
-      // Allow write (create/update) operations only if:
-      // 1. The user is authenticated (must be signed in via Firebase Auth).
-      // 2. The uploaded file is a PDF.
-      // 3. The file size is less than 10MB (same limit as the upload UI).
-      allow write: if request.auth != null
-                   && request.resource.contentType == 'application/pdf'
-                   && request.resource.size < 10 * 1024 * 1024;
+      allow delete: if request.auth != null
+                    && resource.metadata.ownerUid == request.auth.uid;
     }
   }
 }

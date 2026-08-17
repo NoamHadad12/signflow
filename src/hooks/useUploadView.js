@@ -344,7 +344,13 @@ export function useUploadView() {
 
       const fileId = uuidv4();
       const storageRef = ref(storage, `pdfs/${fileId}.pdf`);
-      await uploadBytes(storageRef, file);
+      await uploadBytes(storageRef, file, {
+        contentType: 'application/pdf',
+        customMetadata: {
+          ownerUid: currentUser.uid,
+          documentId: fileId,
+        },
+      });
 
       // Store only the canonical Storage path. Download-token URLs are bearer
       // credentials and should not be copied into a publicly readable record.
